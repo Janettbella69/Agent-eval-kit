@@ -1,0 +1,89 @@
+"""Experiment management routes."""
+
+import asyncio
+
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from storage import queries
+from storage.models import ExperimentIn
+from runner.executor import run_experiment, request_stop
+
+router = APIRouter(prefix="/api/experiments", tags=["experiments"])
+
+
+@router.get("")
+async def list_experiments():
+    experiments = await queries.list_experiments()
+    return [e.model_dump() for e in experiments]
+
+
+@router.post("")
+async def create_experiment(body: ExperimentIn):
+    """Create a new experiment (does not start it)."""
+    dataset = await queries.get_dataset(body.dataset_id)
+    if not dataset:
+        return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
+
+    config = {
+        "cases": body.cases,
+        "trials": body.trials,
+        "concurrency": body.concurrency,
+        "judge_enabled": body.judge_enabled,
+    }
+    experiment_id = await queries.create_experiment(body.dataset_id, body.tag, config)
+    return {"id": experiment_id}
+
+
+@router.get("/{experiment_id}")
+async def get_experiment(experiment_id: int):
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return JSONResponse(status_code=404, content={"detail": "Experiment not found."})
+
+    traces = await queries.get_experiment_traces(experiment_id)
+    return {
+        **experiment.model_dump(),
+        "traces": [t.model_dump() for t in traces],
+    }
+
+
+@router.post("/{experiment_id}/run")
+async def run_experiment_endpoint(experiment_id: int):
+    """Start running an experiment in the background."""
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return JSONResponse(status_code=404, content={"detail": "Experiment not found."})
+
+    if experiment.status == "running":
+        return JSONResponse(status_code=409, content={"detail": "Experiment already running."})
+
+    # Load cases
+    all_cases = await queries.get_cases(experiment.dataset_id)
+    case_filter = experiment.config.get("cases")
+    if case_filter:
+        all_cases = [c for c in all_cases if c.key in case_filter]
+
+    cases = [{"key": c.key, "query": c.query, "type": c.type,
+              "constraints": c.constraints} for c in all_cases]
+
+    trials = experiment.config.get("trials", 1)
+    concurrency = experiment.config.get("concurrency", 1)
+
+    # Run in background
+    asyncio.create_task(
+        run_experiment(experiment_id, cases, concurrency=concurrency, trials=trials)
+    )
+
+    return {"status": "started", "cases": len(cases), "trials": trials}
+
+
+@router.post("/{experiment_id}/stop")
+async def stop_experiment(experiment_id: int):
+    """Request graceful stop of a running experiment."""
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return JSONResponse(status_code=404, content={"detail": "Experiment not found."})
+
+    request_stop(experiment_id)
+    return {"status": "stop_requested"}

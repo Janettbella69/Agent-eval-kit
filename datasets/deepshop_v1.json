@@ -1,0 +1,36 @@
+{
+  "name": "DeepShop V1",
+  "description": "5 cases with structured constraints for deep research quality testing",
+  "cases": [
+    {
+      "key": "ds_noise_cancel",
+      "query": "best noise cancelling headphones under $400 with at least 30 hour battery",
+      "type": "constrained",
+      "constraints": {"price_max": 400, "must_have": ["noise cancelling", "30+ hour battery"]}
+    },
+    {
+      "key": "ds_ultrawide",
+      "query": "34 inch ultrawide monitor for programming and gaming, IPS, under $800",
+      "type": "constrained",
+      "constraints": {"price_max": 800, "must_have": ["34 inch", "ultrawide", "IPS"]}
+    },
+    {
+      "key": "ds_espresso",
+      "query": "best espresso machine for beginners under $500 with built-in grinder",
+      "type": "constrained",
+      "constraints": {"price_max": 500, "must_have": ["built-in grinder"]}
+    },
+    {
+      "key": "ds_ebike",
+      "query": "best electric bike for commuting under $2000, folding, at least 40 mile range",
+      "type": "constrained",
+      "constraints": {"price_max": 2000, "must_have": ["folding", "40+ mile range"]}
+    },
+    {
+      "key": "ds_kids_tablet",
+      "query": "best tablet for kids age 5-8, under $200, durable with parental controls",
+      "type": "constrained",
+      "constraints": {"price_max": 200, "rating_min": 4.0}
+    }
+  ]
+}

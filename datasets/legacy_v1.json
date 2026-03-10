@@ -1,0 +1,26 @@
+{
+  "name": "Legacy Baseline V1",
+  "description": "20 test cases ported from eval_runner.py: 15 positive + 5 negative",
+  "cases": [
+    {"key": "en_clear",    "query": "best wireless earbuds under $100",                   "type": "clear_en",   "constraints": {"price_max": 100}},
+    {"key": "zh_clear",    "query": "2000元以内的机械键盘推荐",                              "type": "clear_zh",   "constraints": {}},
+    {"key": "vague",       "query": "送女朋友生日礼物",                                     "type": "vague",      "constraints": {}},
+    {"key": "comparison",  "query": "AirPods Pro 2 vs Sony WH-1000XM5",                   "type": "comparison", "constraints": {}},
+    {"key": "category",    "query": "best robot vacuum for pet hair",                      "type": "category",   "constraints": {}},
+    {"key": "budget",      "query": "cheapest 4K monitor worth buying",                    "type": "budget",     "constraints": {}},
+    {"key": "multi_const", "query": "gaming laptop under $1500 with good battery",         "type": "constrained","constraints": {"price_max": 1500}},
+    {"key": "niche",       "query": "best ergonomic split keyboard for programmers",        "type": "niche",      "constraints": {}},
+    {"key": "zh_vague",    "query": "帮我选一台相机",                                       "type": "vague_zh",   "constraints": {}},
+    {"key": "complex",     "query": "home office setup under $2000",                       "type": "complex",    "constraints": {"price_max": 2000}},
+    {"key": "upgrade",     "query": "upgrading from AirPods Pro 1, what's better now",     "type": "clear_en",   "constraints": {}},
+    {"key": "gift_budget", "query": "best tech gifts under $50 for Christmas",             "type": "budget",     "constraints": {"price_max": 50}},
+    {"key": "zh_specific", "query": "索尼WH-1000XM5和Bose QC Ultra哪个降噪好",             "type": "comparison", "constraints": {}},
+    {"key": "multi_cat",   "query": "streaming setup for beginner: mic, camera, lights under $500", "type": "complex", "constraints": {"price_max": 500}},
+    {"key": "region",      "query": "best air purifier for wildfire smoke, large room",     "type": "category",   "constraints": {}},
+    {"key": "neg_trivia",  "query": "what color is the sky",                               "type": "negative",   "constraints": {}},
+    {"key": "neg_fact",    "query": "how much RAM does iPhone 15 Pro have",                "type": "negative",   "constraints": {}},
+    {"key": "neg_math",    "query": "what's 15% tip on a $47 bill",                       "type": "negative",   "constraints": {}},
+    {"key": "neg_howto",   "query": "how to reset AirPods Pro",                            "type": "negative",   "constraints": {}},
+    {"key": "neg_opinion", "query": "is Apple better than Samsung",                        "type": "negative",   "constraints": {}}
+  ]
+}
