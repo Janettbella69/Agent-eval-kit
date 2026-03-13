@@ -65,6 +65,12 @@ async def collect_single_case(
 
 def _result_to_trace_data(result: CollectedResult, case: dict, trial_num: int) -> dict:
     """Convert CollectedResult to trace data dict for DB storage."""
+    # Merge latency timestamps into hook_metrics for storage
+    hm = dict(result.hook_metrics)
+    hm["time_to_first_search"] = result.time_to_first_search
+    hm["time_to_first_product"] = result.time_to_first_product
+    hm["time_to_first_text"] = result.time_to_first_text
+
     return {
         "case_key": case["key"],
         "trial_num": trial_num,
@@ -76,11 +82,16 @@ def _result_to_trace_data(result: CollectedResult, case: dict, trial_num: int) -
         "products": result.products,
         "sources": result.sources,
         "events": result.events,
-        "hook_metrics": result.hook_metrics,
+        "hook_metrics": hm,
         "error_events": result.error_events,
         "clarification": result.clarification,
         "prompt_version": result.prompt_version,
         "model": result.model,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "turn_count": result.turn_count,
+        "system_prompt": result.system_prompt,
+        "tool_names": result.tool_names,
     }
 
 
@@ -98,6 +109,10 @@ async def _grade_single_trace(trace: queries.Trace, case: dict) -> dict:
         error_events=trace.error_events,
         clarification=trace.clarification,
         duration_s=trace.duration_s,
+        input_tokens=trace.input_tokens or 0,
+        output_tokens=trace.output_tokens or 0,
+        turn_count=trace.turn_count or 0,
+        tool_names=trace.tool_names or [],
     )
 
     grades = await grade_trace_pipeline(result, case)

@@ -37,29 +37,36 @@ class GraderDef:
 
 
 # Standard grader weights (normal cases)
+# Weights sum to 1.0; composite.py normalizes if some graders are skipped.
 GRADER_DEFS = [
-    GraderDef("rubric_coverage",       0.20, "code", requires_golden=True),
-    GraderDef("product_matching",      0.15, "code", requires_golden=True),
-    GraderDef("rubric_compliance",     0.15, "llm",  requires_golden=True),
-    GraderDef("source_quality",        0.10, "code"),
-    GraderDef("output_format",         0.10, "code"),
-    GraderDef("trap_detection",        0.10, "llm",  requires_golden=True),
+    GraderDef("rubric_coverage",       0.15, "code", requires_golden=True),
+    GraderDef("product_matching",      0.10, "code", requires_golden=True),
+    GraderDef("rubric_compliance",     0.10, "llm",  requires_golden=True),
+    GraderDef("groundedness",          0.15, "llm"),
+    GraderDef("source_authority",      0.10, "code"),
+    GraderDef("output_format",         0.05, "code"),
+    GraderDef("trap_detection",        0.05, "llm",  requires_golden=True),
     GraderDef("actionability",         0.10, "llm"),
-    GraderDef("constraint_compliance", 0.05, "code"),
     GraderDef("efficiency",            0.05, "code"),
+    GraderDef("tool_calls",            0.05, "code"),
+    GraderDef("transcript",            0.05, "code"),
+    GraderDef("state_check",           0.05, "code"),
 ]
 
 # Trap case weight overrides
 TRAP_WEIGHT_OVERRIDES = {
-    "trap_detection":        0.40,
+    "trap_detection":        0.35,
+    "groundedness":          0.15,
     "product_matching":      0.05,
     "rubric_coverage":       0.00,  # skip
     "rubric_compliance":     0.00,  # skip
-    "source_quality":        0.10,
-    "output_format":         0.10,
-    "actionability":         0.15,
-    "constraint_compliance": 0.05,
-    "efficiency":            0.15,
+    "source_authority":      0.10,
+    "output_format":         0.05,
+    "actionability":         0.10,
+    "efficiency":            0.05,
+    "tool_calls":            0.05,
+    "transcript":            0.05,
+    "state_check":           0.05,
 }
 
 # Failure funnel stages (in order)

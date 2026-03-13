@@ -87,6 +87,21 @@ _MIGRATIONS = [
     "ALTER TABLE traces ADD COLUMN model TEXT DEFAULT ''",
     "ALTER TABLE traces ADD COLUMN judge_prompt_version TEXT DEFAULT ''",
     "ALTER TABLE traces ADD COLUMN human_pass INTEGER",
+    # Phase 3: Agent trace metadata (tokens, turns, prompts, tools)
+    "ALTER TABLE traces ADD COLUMN input_tokens INTEGER DEFAULT 0",
+    "ALTER TABLE traces ADD COLUMN output_tokens INTEGER DEFAULT 0",
+    "ALTER TABLE traces ADD COLUMN turn_count INTEGER DEFAULT 0",
+    "ALTER TABLE traces ADD COLUMN system_prompt TEXT DEFAULT ''",
+    "ALTER TABLE traces ADD COLUMN tool_names TEXT DEFAULT '[]'",
+    "ALTER TABLE traces ADD COLUMN judge_prompts TEXT DEFAULT '{}'",
+    # Module 10: Open/Axial Coding — qualitative failure labels
+    "ALTER TABLE traces ADD COLUMN open_codes TEXT DEFAULT '[]'",
+    # Dataset staleness tracking
+    "ALTER TABLE cases ADD COLUMN last_validated_at REAL DEFAULT 0",
+    # Transcript review workflow
+    "ALTER TABLE traces ADD COLUMN review_status TEXT DEFAULT 'pending'",
+    "ALTER TABLE traces ADD COLUMN reviewed_at REAL",
+    "ALTER TABLE traces ADD COLUMN review_notes TEXT DEFAULT ''",
 ]
 
 

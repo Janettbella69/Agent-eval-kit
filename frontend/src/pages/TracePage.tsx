@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getTrace, annotateGrader, annotateHumanPass } from '../lib/api.ts'
+import { getTrace, annotateGrader, annotateHumanPass, updateOpenCodes, startTraceAnalysis, getAnalysisResult } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
 import GraderBreakdown from '../components/GraderBreakdown.tsx'
 import TraceTimeline from '../components/TraceTimeline.tsx'
 import FailureFunnel from '../components/FailureFunnel.tsx'
-import type { Trace, GradingLogEntry } from '../types.ts'
+import type { Trace, GradingLogEntry, AnalysisResult } from '../types.ts'
 
-type TabKey = 'guide' | 'products' | 'sources' | 'events' | 'scores' | 'logs' | 'rubric'
+type TabKey = 'guide' | 'products' | 'sources' | 'events' | 'scores' | 'logs' | 'config' | 'rubric' | 'codes' | 'ai'
 
 export default function TracePage() {
   const { id } = useParams<{ id: string }>()
@@ -25,7 +25,7 @@ export default function TracePage() {
   if (loading) return <div className="text-slate-400">Loading...</div>
   if (!trace) return <div className="text-red-500">Trace not found.</div>
 
-  const tabs: TabKey[] = ['guide', 'products', 'sources', 'events', 'scores', 'logs']
+  const tabs: TabKey[] = ['guide', 'products', 'sources', 'events', 'scores', 'logs', 'config', 'codes', 'ai']
   if (trace.case_type === 'shoppingcomp' || trace.case_type === 'trap') {
     tabs.push('rubric')
   }
@@ -45,21 +45,38 @@ export default function TracePage() {
           </div>
           <div className="text-sm text-slate-500 mt-1 max-w-2xl">{trace.query}</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+            <span className={`px-1.5 py-0.5 rounded font-medium ${
+              trace.status === 'graded' ? 'bg-emerald-50 text-emerald-600'
+                : trace.status === 'done' ? 'bg-blue-50 text-blue-600'
+                : trace.status === 'running' ? 'bg-amber-50 text-amber-600'
+                : 'bg-slate-100 text-slate-500'
+            }`}>{trace.status}</span>
+            {trace.review_status && trace.review_status !== 'pending' && (
+              <span className={`px-1.5 py-0.5 rounded font-medium ${
+                trace.review_status === 'reviewed' ? 'bg-emerald-50 text-emerald-600'
+                  : 'bg-red-50 text-red-600'
+              }`}>{trace.review_status}</span>
+            )}
             <span className="px-1.5 py-0.5 rounded bg-slate-100">{trace.case_type}</span>
+            {trace.model && <span className="font-mono">{trace.model}</span>}
             <span>{trace.duration_s.toFixed(1)}s</span>
+            {trace.turn_count > 0 && <span>{trace.turn_count} turns</span>}
             <span>{trace.products.length} products</span>
             <span>{trace.sources.length} sources</span>
             {trace.grading_duration_s > 0 && (
               <span>grading: {trace.grading_duration_s.toFixed(1)}s</span>
             )}
           </div>
-          {(trace.prompt_version || trace.judge_prompt_version || trace.model) && (
-            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400 font-mono">
-              {trace.prompt_version && <span>prompt: {trace.prompt_version}</span>}
-              {trace.judge_prompt_version && <span>judge: {trace.judge_prompt_version}</span>}
-              {trace.model && <span>model: {trace.model}</span>}
-            </div>
-          )}
+          {/* Token usage + prompt versions */}
+          <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400 font-mono flex-wrap">
+            {(trace.input_tokens > 0 || trace.output_tokens > 0) && (
+              <span>
+                tokens: {(trace.input_tokens / 1000).toFixed(1)}k in / {(trace.output_tokens / 1000).toFixed(1)}k out
+              </span>
+            )}
+            {trace.prompt_version && <span>prompt: {trace.prompt_version}</span>}
+            {trace.judge_prompt_version && <span>judge: {trace.judge_prompt_version}</span>}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           <ScoreBadge score={trace.final_score} pass={trace.final_pass} size="lg" />
@@ -84,6 +101,7 @@ export default function TracePage() {
             {t === 'sources' && ` (${trace.sources.length})`}
             {t === 'events' && ` (${trace.events.length})`}
             {t === 'logs' && trace.grading_log.length > 0 && ` (${trace.grading_log.length})`}
+            {t === 'codes' && trace.open_codes && trace.open_codes.length > 0 && ` (${trace.open_codes.length})`}
           </button>
         ))}
       </div>
@@ -164,6 +182,12 @@ export default function TracePage() {
           {tab === 'scores' && <ScoresTab trace={trace} />}
 
           {tab === 'logs' && <LogsTab trace={trace} />}
+
+          {tab === 'config' && <ConfigTab trace={trace} />}
+
+          {tab === 'codes' && <CodesTab trace={trace} onUpdated={setTrace} />}
+
+          {tab === 'ai' && <AIAnalysisTab trace={trace} />}
 
           {tab === 'rubric' && <RubricTab trace={trace} />}
         </div>
@@ -694,6 +718,573 @@ function ScoresTab({ trace }: { trace: Trace }) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ── Config Tab ── */
+function MetricCell({ label, value, unit, warn }: { label: string; value: string | number; unit?: string; warn?: boolean }) {
+  return (
+    <div>
+      <div className="text-[10px] text-slate-400">{label}</div>
+      <div className={`text-sm font-medium tabular-nums ${warn ? 'text-amber-600' : 'text-slate-700'}`}>
+        {value}{unit && <span className="text-[10px] text-slate-400 ml-0.5">{unit}</span>}
+      </div>
+    </div>
+  )
+}
+
+function ProcessMetrics({ hookMetrics, trace }: { hookMetrics: Record<string, unknown>; trace: Trace }) {
+  const searchCount = (hookMetrics.search_count as number) || 0
+  const productCount = (hookMetrics.product_count as number) || trace.products?.length || 0
+  const entityCount = (hookMetrics.entity_count as number) || 0
+  const dimsExplored = (hookMetrics.dimensions_explored as number) || 0
+  const sourceDomainCount = (hookMetrics.source_domain_count as number) || 0
+  const toolCallCount = (hookMetrics.tool_call_count as number) || 0
+  const failureCount = (hookMetrics.failure_count as number) || 0
+  const avgBatch = (hookMetrics.avg_batch_size as number) || 0
+  const maxBatch = (hookMetrics.max_batch_size as number) || 0
+  const batchCount = (hookMetrics.batch_count as number) || 0
+  const reqTotal = (hookMetrics.requirements_total as number) || 0
+  const reqCovered = (hookMetrics.requirements_covered as number) || 0
+
+  // Latency
+  const ttfs = (hookMetrics.time_to_first_search as number) || 0
+  const ttfp = (hookMetrics.time_to_first_product as number) || 0
+  const ttft = (hookMetrics.time_to_first_text as number) || 0
+  const duration = trace.duration_s || 0
+  const tokensPerSec = duration > 0 ? (trace.output_tokens / duration) : 0
+
+  // Derived efficiency
+  const pc = Math.max(productCount, 1)
+  const tokensPerProduct = trace.output_tokens > 0 ? Math.round(trace.output_tokens / pc) : 0
+  const searchesPerProduct = searchCount > 0 ? (searchCount / pc).toFixed(1) : '—'
+  const toolsPerProduct = toolCallCount > 0 ? (toolCallCount / pc).toFixed(1) : '—'
+
+  // Dimension coverage breakdown
+  const dimCoverage = (hookMetrics.dimension_coverage as Record<string, number>) || {}
+
+  return (
+    <div className="rounded-xl bg-white border border-slate-200 p-4">
+      <h4 className="text-sm font-semibold text-slate-700 mb-3">Process Metrics</h4>
+      <div className="grid grid-cols-3 gap-4">
+        {/* Latency column */}
+        <div className="space-y-2.5">
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Latency</div>
+          <MetricCell label="First search" value={ttfs > 0 ? ttfs.toFixed(1) : '—'} unit="s" />
+          <MetricCell label="First product" value={ttfp > 0 ? ttfp.toFixed(1) : '—'} unit="s" />
+          <MetricCell label="First text" value={ttft > 0 ? ttft.toFixed(1) : '—'} unit="s" />
+          <MetricCell label="Tokens/sec" value={tokensPerSec > 0 ? tokensPerSec.toFixed(1) : '—'} />
+        </div>
+
+        {/* Efficiency column */}
+        <div className="space-y-2.5">
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Efficiency</div>
+          <MetricCell label="Tokens/product" value={tokensPerProduct > 0 ? tokensPerProduct.toLocaleString() : '—'} warn={tokensPerProduct > 5000} />
+          <MetricCell label="Searches/product" value={searchesPerProduct} warn={Number(searchesPerProduct) > 5} />
+          <MetricCell label="Tools/product" value={toolsPerProduct} />
+          <MetricCell label="Error rate" value={toolCallCount > 0 ? ((failureCount / toolCallCount) * 100).toFixed(0) : '0'} unit="%" warn={failureCount > 0} />
+        </div>
+
+        {/* Research Depth column */}
+        <div className="space-y-2.5">
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Research Depth</div>
+          <MetricCell label="Dimensions" value={`${dimsExplored}/6`} warn={dimsExplored < 4} />
+          <MetricCell label="Entities" value={entityCount} warn={entityCount < 2} />
+          <MetricCell label="Source domains" value={sourceDomainCount} warn={sourceDomainCount < 3} />
+          <MetricCell label="Requirements" value={reqTotal > 0 ? `${reqCovered}/${reqTotal}` : '—'} />
+        </div>
+      </div>
+
+      {/* Dimension coverage mini-bar */}
+      {Object.keys(dimCoverage).length > 0 && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <div className="text-[10px] text-slate-400 mb-1.5">Dimension Coverage</div>
+          <div className="flex gap-1.5 flex-wrap">
+            {Object.entries(dimCoverage).map(([dim, count]) => (
+              <span key={dim} className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                (count as number) > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'
+              }`}>
+                {dim}: {count as number}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Parallel execution mini-bar */}
+      {batchCount > 0 && (
+        <div className="mt-2 pt-2 border-t border-slate-100 flex gap-4 text-[10px] text-slate-500">
+          <span>Parallel batches: {batchCount}</span>
+          <span>Avg batch size: {avgBatch}</span>
+          <span>Max batch: {maxBatch}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConfigTab({ trace }: { trace: Trace }) {
+  const [expandedSection, setExpandedSection] = useState<string | null>(null)
+  const toggle = (section: string) =>
+    setExpandedSection(prev => prev === section ? null : section)
+
+  const hookMetrics = trace.hook_metrics as Record<string, unknown>
+  const cacheRead = (hookMetrics?.cache_read_tokens as number) || 0
+  const cacheWrite = (hookMetrics?.cache_write_tokens as number) || 0
+  const totalInput = trace.input_tokens + cacheRead + cacheWrite
+  const cachePct = totalInput > 0 ? (cacheRead / totalInput * 100) : 0
+
+  return (
+    <div className="space-y-4">
+      {/* Execution Summary */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">Execution Summary</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-[10px] text-slate-400">Model</div>
+            <div className="text-sm font-medium text-slate-700 font-mono">{trace.model || '—'}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-slate-400">Duration</div>
+            <div className="text-sm font-medium text-slate-700">{trace.duration_s.toFixed(1)}s</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-slate-400">Turns</div>
+            <div className="text-sm font-medium text-slate-700">{trace.turn_count || '—'}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-slate-400">Status</div>
+            <div className={`text-sm font-medium ${
+              trace.status === 'graded' ? 'text-emerald-600'
+                : trace.status === 'done' ? 'text-blue-600'
+                : trace.status === 'running' ? 'text-amber-600'
+                : 'text-slate-500'
+            }`}>{trace.status}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Token Usage */}
+      {(trace.input_tokens > 0 || trace.output_tokens > 0) && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <h4 className="text-sm font-semibold text-slate-700 mb-3">Token Usage</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-[10px] text-slate-400">Input</div>
+              <div className="text-sm font-medium text-slate-700 tabular-nums">
+                {trace.input_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400">Output</div>
+              <div className="text-sm font-medium text-slate-700 tabular-nums">
+                {trace.output_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400">Cache Read</div>
+              <div className="text-sm font-medium text-slate-700 tabular-nums">
+                {cacheRead.toLocaleString()}
+                {cachePct > 0 && (
+                  <span className="text-[10px] text-emerald-500 ml-1">
+                    ({cachePct.toFixed(0)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400">Cache Write</div>
+              <div className="text-sm font-medium text-slate-700 tabular-nums">
+                {cacheWrite.toLocaleString()}
+              </div>
+            </div>
+          </div>
+          {/* Token bar visualization */}
+          <div className="mt-3 flex h-2 rounded-full overflow-hidden bg-slate-100">
+            {totalInput > 0 && (
+              <>
+                <div
+                  className="bg-blue-400"
+                  style={{ width: `${(trace.input_tokens / (totalInput + trace.output_tokens)) * 100}%` }}
+                  title={`Input: ${trace.input_tokens}`}
+                />
+                <div
+                  className="bg-emerald-400"
+                  style={{ width: `${(cacheRead / (totalInput + trace.output_tokens)) * 100}%` }}
+                  title={`Cache read: ${cacheRead}`}
+                />
+                <div
+                  className="bg-amber-400"
+                  style={{ width: `${(cacheWrite / (totalInput + trace.output_tokens)) * 100}%` }}
+                  title={`Cache write: ${cacheWrite}`}
+                />
+                <div
+                  className="bg-purple-400"
+                  style={{ width: `${(trace.output_tokens / (totalInput + trace.output_tokens)) * 100}%` }}
+                  title={`Output: ${trace.output_tokens}`}
+                />
+              </>
+            )}
+          </div>
+          <div className="mt-1.5 flex gap-3 text-[9px] text-slate-400">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /> Input</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Cache Read</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Cache Write</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400" /> Output</span>
+          </div>
+        </div>
+      )}
+
+      {/* Process Metrics */}
+      {hookMetrics?.search_count != null && (
+        <ProcessMetrics hookMetrics={hookMetrics} trace={trace} />
+      )}
+
+      {/* User Message */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
+        <h4 className="text-sm font-semibold text-slate-700 mb-2">User Message</h4>
+        <div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 font-mono whitespace-pre-wrap">
+          {trace.query}
+        </div>
+      </div>
+
+      {/* Tool Names */}
+      {trace.tool_names && trace.tool_names.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <h4 className="text-sm font-semibold text-slate-700 mb-2">
+            Available Tools ({trace.tool_names.length})
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
+            {trace.tool_names.map((tool, i) => (
+              <span key={i} className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-mono">
+                {tool}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* System Prompt */}
+      {trace.system_prompt && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <button
+            onClick={() => toggle('system_prompt')}
+            className="w-full flex items-center justify-between"
+          >
+            <h4 className="text-sm font-semibold text-slate-700">
+              System Prompt
+              <span className="ml-2 text-[10px] font-normal text-slate-400">
+                {(trace.system_prompt.length / 1000).toFixed(1)}k chars
+              </span>
+            </h4>
+            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>
+              {expandedSection === 'system_prompt' ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+          {expandedSection === 'system_prompt' && (
+            <pre className="mt-3 text-[11px] text-slate-600 bg-slate-50 rounded-lg p-3 overflow-x-auto max-h-[600px] overflow-y-auto whitespace-pre-wrap">
+              {trace.system_prompt}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Judge Prompts */}
+      {trace.judge_prompts && Object.keys(trace.judge_prompts).length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <button
+            onClick={() => toggle('judge_prompts')}
+            className="w-full flex items-center justify-between"
+          >
+            <h4 className="text-sm font-semibold text-slate-700">
+              Judge Prompts ({Object.keys(trace.judge_prompts).length} graders)
+            </h4>
+            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>
+              {expandedSection === 'judge_prompts' ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+          {expandedSection === 'judge_prompts' && (
+            <div className="mt-3 space-y-3">
+              {Object.entries(trace.judge_prompts).map(([name, prompt]) => (
+                <div key={name} className="rounded-lg border border-slate-100 p-3">
+                  <div className="text-xs font-medium text-purple-600 mb-1">
+                    {name.replace(/_/g, ' ')}
+                  </div>
+                  <pre className="text-[11px] text-slate-600 bg-slate-50 rounded p-2 overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap">
+                    {typeof prompt === 'string' ? prompt : JSON.stringify(prompt, null, 2)}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Prompt Versions */}
+      {(trace.prompt_version || trace.judge_prompt_version) && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <h4 className="text-sm font-semibold text-slate-700 mb-2">Version Hashes</h4>
+          <div className="text-xs text-slate-500 font-mono space-y-1">
+            {trace.prompt_version && <div>prompt: {trace.prompt_version}</div>}
+            {trace.judge_prompt_version && <div>judge: {trace.judge_prompt_version}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Open Codes Tab ── */
+function CodesTab({ trace, onUpdated }: { trace: Trace; onUpdated: (t: Trace) => void }) {
+  const [newCode, setNewCode] = useState('')
+  const [saving, setSaving] = useState(false)
+  const codes = trace.open_codes || []
+
+  // Common code suggestions based on eval domain
+  const suggestions = [
+    'search-timeout', 'search-irrelevant', 'search-insufficient',
+    'price-missing', 'price-wrong', 'price-outdated',
+    'product-hallucinated', 'product-wrong-category', 'product-duplicate',
+    'source-dead-link', 'source-low-quality', 'source-missing',
+    'format-no-table', 'format-no-citations', 'format-too-short',
+    'guide-missing-comparison', 'guide-no-recommendation', 'guide-biased',
+    'clarification-unnecessary', 'clarification-missing',
+  ].filter(s => !codes.includes(s))
+
+  const handleAdd = async (code: string) => {
+    if (!code.trim() || codes.includes(code.trim())) return
+    setSaving(true)
+    try {
+      const result = await updateOpenCodes(trace.id, [code.trim()])
+      onUpdated({ ...trace, open_codes: result.open_codes })
+      setNewCode('')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async (code: string) => {
+    setSaving(true)
+    try {
+      const result = await updateOpenCodes(trace.id, [], [code])
+      onUpdated({ ...trace, open_codes: result.open_codes })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Current codes */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">
+          Open Codes
+          <span className="text-[10px] font-normal text-slate-400 ml-2">
+            qualitative failure labels for pattern analysis
+          </span>
+        </h4>
+
+        {codes.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {codes.map(code => (
+              <span
+                key={code}
+                className="group flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium"
+              >
+                {code}
+                <button
+                  onClick={() => handleRemove(code)}
+                  disabled={saving}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-400 hover:text-red-500"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-400 mb-3">
+            No codes applied yet. Add codes to tag failure patterns.
+          </div>
+        )}
+
+        {/* Add code input */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newCode}
+            onChange={e => setNewCode(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(newCode) }}
+            placeholder="Type a code (e.g. price-missing)"
+            className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm"
+            disabled={saving}
+          />
+          <button
+            onClick={() => handleAdd(newCode)}
+            disabled={saving || !newCode.trim()}
+            className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm font-medium disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Suggestions */}
+      {suggestions.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <h4 className="text-sm font-semibold text-slate-700 mb-2">Suggested Codes</h4>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map(code => (
+              <button
+                key={code}
+                onClick={() => handleAdd(code)}
+                disabled={saving}
+                className="px-2 py-0.5 rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-50"
+              >
+                + {code}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Grouping hint */}
+      <div className="text-[11px] text-slate-400 px-1">
+        Codes are auto-grouped by prefix (e.g. "search-*") in the Overview coding analysis.
+        Use consistent prefixes for effective axial coding.
+      </div>
+    </div>
+  )
+}
+
+/* ── AI Analysis Tab ── */
+function AIAnalysisTab({ trace }: { trace: Trace }) {
+  const [question, setQuestion] = useState('')
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Preset questions
+  const presets = [
+    'Why did this trace fail? What went wrong?',
+    'What could be improved in the search strategy?',
+    'Are the product recommendations well-supported by sources?',
+    'Is the buyer guide comprehensive and accurate?',
+  ]
+
+  const handleSubmit = useCallback(async (q: string) => {
+    if (!q.trim()) return
+    setSubmitting(true)
+    setResult(null)
+    try {
+      const res = await startTraceAnalysis([trace.id], q)
+      setRequestId(res.request_id)
+    } catch (e) {
+      setResult({ status: 'error', result: null, error: String(e) })
+    } finally {
+      setSubmitting(false)
+    }
+  }, [trace.id])
+
+  // Poll for results
+  useEffect(() => {
+    if (!requestId) return
+    const poll = async () => {
+      try {
+        const res = await getAnalysisResult(requestId)
+        if (res.status !== 'running') {
+          setResult(res)
+          if (pollRef.current) clearInterval(pollRef.current)
+        }
+      } catch {
+        // keep polling
+      }
+    }
+    poll() // immediate first check
+    pollRef.current = setInterval(poll, 2000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [requestId])
+
+  return (
+    <div className="space-y-4">
+      {/* Question input */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
+        <h4 className="text-sm font-semibold text-slate-700 mb-3">
+          AI Analysis
+          <span className="text-[10px] font-normal text-slate-400 ml-2">
+            ask Claude to analyze this trace
+          </span>
+        </h4>
+
+        {/* Presets */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {presets.map((p, i) => (
+            <button
+              key={i}
+              onClick={() => { setQuestion(p); handleSubmit(p) }}
+              disabled={submitting || (result?.status === 'running')}
+              className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom question */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSubmit(question) }}
+            placeholder="Ask a custom question about this trace..."
+            className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm"
+            disabled={submitting}
+          />
+          <button
+            onClick={() => handleSubmit(question)}
+            disabled={submitting || !question.trim() || result?.status === 'running'}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+          >
+            {submitting ? 'Starting...' : 'Analyze'}
+          </button>
+        </div>
+      </div>
+
+      {/* Result */}
+      {result?.status === 'running' && (
+        <div className="rounded-xl bg-white border border-slate-200 p-6 text-center">
+          <span className="material-symbols-outlined animate-spin text-blue-500 block mb-2" style={{ fontSize: '24px' }}>
+            progress_activity
+          </span>
+          <div className="text-sm text-slate-500">Analyzing trace...</div>
+        </div>
+      )}
+
+      {result?.status === 'done' && result.result && (
+        <div className="rounded-xl bg-white border border-slate-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-700">Analysis Result</h4>
+            {result.trace_count && (
+              <span className="text-[10px] text-slate-400">{result.trace_count} trace(s) analyzed</span>
+            )}
+          </div>
+          <div className="prose prose-slate prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {result.result}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
+
+      {result?.status === 'error' && (
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+          <div className="text-sm text-red-700 font-medium">Analysis failed</div>
+          <div className="text-xs text-red-600 mt-1">{result.error}</div>
+        </div>
+      )}
     </div>
   )
 }

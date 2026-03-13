@@ -1,6 +1,7 @@
 """Experiment management routes."""
 
 import asyncio
+import subprocess
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -12,10 +13,37 @@ from runner.executor import run_experiment, request_stop, regrade_experiment
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 
+def _get_git_commit() -> str:
+    """Get current git commit hash (short). Returns empty string on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
 @router.get("")
 async def list_experiments():
     experiments = await queries.list_experiments()
     return [e.model_dump() for e in experiments]
+
+
+# IMPORTANT: /compare MUST be before /{experiment_id} to avoid path param conflict
+@router.get("/compare")
+async def compare_experiments_endpoint(base: int, target: int):
+    """Compare two experiments case-by-case: improved, regressed, unchanged."""
+    base_exp = await queries.get_experiment(base)
+    target_exp = await queries.get_experiment(target)
+    if not base_exp:
+        return JSONResponse(status_code=404, content={"detail": f"Base experiment #{base} not found."})
+    if not target_exp:
+        return JSONResponse(status_code=404, content={"detail": f"Target experiment #{target} not found."})
+
+    result = await queries.compare_experiments(base, target)
+    return result
 
 
 @router.post("")
@@ -25,11 +53,23 @@ async def create_experiment(body: ExperimentIn):
     if not dataset:
         return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
 
+    # Auto-capture git commit and prompt version
+    git_commit = _get_git_commit()
+    try:
+        from config import PROMPT_VERSION
+        prompt_version = PROMPT_VERSION
+    except (ImportError, AttributeError):
+        prompt_version = ""
+
     config = {
         "cases": body.cases,
         "trials": body.trials,
         "concurrency": body.concurrency,
         "judge_enabled": body.judge_enabled,
+        "git_commit": git_commit,
+        "prompt_version": prompt_version,
+        "notes": body.notes,
+        "mode": body.mode,
     }
     experiment_id = await queries.create_experiment(body.dataset_id, body.tag, config)
     return {"id": experiment_id}

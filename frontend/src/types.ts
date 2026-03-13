@@ -113,6 +113,16 @@ export interface Trace {
   model: string
   judge_prompt_version: string
   human_pass: boolean | null
+  input_tokens: number
+  output_tokens: number
+  turn_count: number
+  system_prompt: string
+  tool_names: string[]
+  judge_prompts: Record<string, unknown>
+  open_codes: string[]
+  review_status: 'pending' | 'reviewed' | 'flagged'
+  reviewed_at: number | null
+  review_notes: string
   created_at: number
 }
 
@@ -171,6 +181,143 @@ export interface CaseHistoryEntry {
   experiment_id: number
   tag: string
   exp_created: number
+}
+
+export interface JudgeAlignment {
+  total_labeled: number
+  tp?: number
+  fp?: number
+  tn?: number
+  fn?: number
+  tpr: number | null
+  tnr: number | null
+  human_pass_rate?: number
+  auto_pass_rate?: number
+  total_traces?: number
+  observed_pass_rate: number | null
+  corrected_pass_rate: number | null
+}
+
+// ── Experiment Comparison ──────────────────────
+export interface CompareCase {
+  case_key: string
+  query: string
+  case_type: string
+  base_score: number | null
+  target_score: number | null
+  delta: number | null
+  base_pass: boolean | null
+  target_pass: boolean | null
+  status: 'improved' | 'regressed' | 'unchanged' | 'new' | 'removed'
+}
+
+export interface CompareExperimentInfo {
+  id: number
+  tag: string
+  avg_score: number
+  pass_rate: number
+}
+
+export interface CompareSummary {
+  improved: number
+  regressed: number
+  unchanged: number
+  new: number
+  removed: number
+  net_delta: number
+  base_avg: number
+  target_avg: number
+}
+
+export interface CompareResult {
+  base: CompareExperimentInfo
+  target: CompareExperimentInfo
+  cases: CompareCase[]
+  summary: CompareSummary
+}
+
+// ── Open/Axial Coding ─────────────────────────
+export interface OpenCodeStat {
+  code: string
+  count: number
+  pass_rate: number
+  example_case_keys: string[]
+}
+
+export interface AxialCode {
+  theme: string
+  codes: string[]
+  count: number
+}
+
+export interface CodingAnalysis {
+  open_codes: OpenCodeStat[]
+  axial_codes: AxialCode[]
+  total_traces: number
+}
+
+// ── AI Analysis ───────────────────────────────
+export interface AnalysisResult {
+  status: 'running' | 'done' | 'error'
+  result: string | null
+  error: string | null
+  finished_at?: number
+  trace_count?: number
+}
+
+// ── Dataset Staleness ─────────────────────────
+export interface StalenessCase {
+  key: string
+  query: string
+  last_validated_at: number
+  status: 'fresh' | 'stale' | 'never_validated'
+  age_days: number | null
+}
+
+export interface StalenessReport {
+  total_cases: number
+  validated: number
+  stale: number
+  never_validated: number
+  fresh: number
+  staleness_pct: number
+  max_age_days: number
+  cases: StalenessCase[]
+}
+
+// ── Transcript Review ────────────────────────
+export interface ReviewQueueItem {
+  trace_id: number
+  case_key: string
+  score: number
+  passed: boolean
+  experiment_id: number
+  duration_s: number
+  case_type: string
+}
+
+export interface ReviewStats {
+  total: number
+  reviewed: number
+  flagged: number
+  pending: number
+  coverage_pct: number
+}
+
+// ── Production Import (LangFuse → Eval) ─────
+export interface ProductionImportResult {
+  experiment_id: number | null
+  dataset_id?: number
+  traces_imported: number
+  traces_skipped: number
+  detail?: string
+}
+
+export interface LangfuseStatus {
+  connected: boolean
+  reason?: string
+  host?: string
+  trace_count?: number
 }
 
 export interface WsMessage {

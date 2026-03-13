@@ -1,7 +1,7 @@
 """Composite score engine — weighted aggregation with graceful degradation.
 
 Handles:
-- Normal cases: all 9 graders at standard weights
+- Normal cases: 12 graders at standard weights
 - Trap cases: weight overrides (trap_detection boosted)
 - Missing golden_data: skip graders requiring golden data, scale up remaining
 - Skipped LLM graders: scale up code grader weights proportionally

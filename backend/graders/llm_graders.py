@@ -1,9 +1,10 @@
 """LLM-powered graders (Agent-as-Judge) — deep investigation mode.
 
-Three graders:
+Four graders:
   1. rubric_compliance: Per-scene rubric evaluation (requires golden_data)
   2. trap_detection: Trap identification quality (requires trap_rubric)
   3. actionability: Can user make a purchase decision?
+  4. groundedness: Are factual claims supported by cited sources?
 
 Each returns GraderResult with 0-100 score.
 All graders fail-open: return None on errors (pipeline handles gracefully).
@@ -175,6 +176,7 @@ async def _run_llm_grader(
         reasoning = result.get("reasoning", "")
         details = result.get("details", {})
         details["reasoning"] = reasoning
+        details["system_prompt"] = system_prompt  # For judge prompt traceability
 
         # Store self-correction metadata
         revision_num = result.get("revision_num", 1)
@@ -389,5 +391,98 @@ Spot-check 1-2 prices via WebSearch. Score actionability and verify."""
     r = await _run_llm_grader(system_prompt, user_message, "actionability", 0.10)
     if r is None:
         return GraderResult(name="actionability", score=0, weight=0.10,
+                            category="llm", details={"skipped": True, "reason": "llm_error"})
+    return r
+
+
+# ── Grader 4: Groundedness ─────────────────────────────────────
+
+async def grade_groundedness(result: CollectedResult) -> GraderResult:
+    """Agent-as-Judge: are factual claims in the guide supported by cited sources?
+
+    This is the primary hallucination detector. The judge extracts factual claims
+    from the guide, then checks each against the source list and guide citations.
+    """
+    if not result.guide_text or len(result.guide_text) < 200:
+        return GraderResult(name="groundedness", score=0, weight=0.15,
+                            category="llm", details={"skipped": True, "reason": "no guide text"})
+
+    # Build source context
+    source_lines = []
+    for i, s in enumerate(result.sources[:20], 1):
+        if isinstance(s, dict):
+            title = s.get("title", "")
+            url = s.get("url", "")
+            domain = s.get("domain", "")
+            source_lines.append(f"[{i}] {title} — {domain} ({url})")
+    sources_block = "\n".join(source_lines) if source_lines else "(no sources provided)"
+
+    operation_log = _build_operation_log(result)
+
+    system_prompt = """You are a groundedness evaluator for a shopping research agent.
+
+## Task
+Identify factual claims in the buyer guide and verify whether each is supported
+by the cited sources. This directly measures hallucination risk.
+
+## What counts as a "factual claim"
+- Specific product specs: "The Sony WH-1000XM5 has 30-hour battery life"
+- Price claims: "Available for $349 at Best Buy"
+- Comparative claims: "The XM5 has better noise cancellation than the Bose QC Ultra"
+- Performance claims: "RTINGS rated it 8.2/10 for sound quality"
+- Feature claims: "It supports LDAC and multipoint connection"
+
+## What does NOT count
+- Subjective opinions: "This is a great choice for commuters"
+- General category knowledge: "Noise-cancelling headphones reduce ambient sound"
+- Recommendations: "We recommend the XM5 for most people"
+
+## Grounding rules
+A claim is GROUNDED if:
+1. A matching source is cited inline (e.g., [[RTINGS]](url)) AND the source domain
+   is plausibly authoritative for that claim type, OR
+2. The claim references a specific product that appears in the product list with
+   matching details (price, specs), OR
+3. The operation log shows the agent searched for and accessed a relevant page
+
+A claim is UNGROUNDED if:
+1. No source supports it and the agent never searched for the information, OR
+2. The cited source doesn't actually cover that claim (citation mismatch), OR
+3. The claim contradicts commonly known facts (hallucinated spec)
+
+## Investigation Protocol
+1. Extract 10-20 factual claims from the guide (focus on concrete, verifiable ones)
+2. For each claim, check: is there a matching source? Did the agent search for it?
+3. Spot-check 2-3 suspicious claims via WebSearch to verify accuracy
+4. Score using `score_grader`:
+   - score = (grounded claims / total claims) × 100
+   - In details, list the ungrounded claims and why they're unsupported
+5. Reflect — revise if spot-checks reveal more issues than expected
+
+## Scoring Guide
+- 90-100: Nearly all claims have clear source support
+- 70-89: Most claims grounded, a few minor unsupported details
+- 50-69: Significant number of unsupported claims
+- 30-49: Many claims appear fabricated or unsupported
+- 0-29: Guide appears largely hallucinated"""
+
+    user_message = f"""## Sources Cited ({len(result.sources)})
+{sources_block}
+
+{operation_log}
+
+## Guide Text (first 8000 chars)
+{result.guide_text[:8000]}
+
+## Products Found ({len(result.products)})
+{', '.join(p.get('name', '?') if isinstance(p, dict) else str(p) for p in result.products[:10])}
+
+---
+Extract factual claims, verify against sources and operation log, spot-check 2-3
+suspicious claims via WebSearch. Score groundedness and list ungrounded claims."""
+
+    r = await _run_llm_grader(system_prompt, user_message, "groundedness", 0.15)
+    if r is None:
+        return GraderResult(name="groundedness", score=0, weight=0.15,
                             category="llm", details={"skipped": True, "reason": "llm_error"})
     return r

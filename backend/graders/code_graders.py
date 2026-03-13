@@ -5,10 +5,11 @@ returning a GraderResult with 0-100 score.
 """
 
 import re
+from collections import Counter
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
-from constants import TRUSTED_REVIEW_DOMAINS
+from constants import TRUSTED_REVIEW_DOMAINS, DOMAIN_TO_TIER, TIER_SCORES
 from graders.types import GraderResult
 from runner.collector import CollectedResult
 
@@ -240,6 +241,99 @@ def grade_source_quality(result: CollectedResult, golden_data: dict) -> GraderRe
     )
 
 
+# ── Source Authority ─────────────────────────────
+
+def _get_domain_tier(domain: str) -> int:
+    """Map a domain to its T1-T6 tier. Unknown domains default to T6."""
+    domain = domain.lower().lstrip("www.")
+    if domain in DOMAIN_TO_TIER:
+        return DOMAIN_TO_TIER[domain]
+    # Check subdomains (e.g., "uk.pcmag.com" → "pcmag.com")
+    parts = domain.split(".")
+    for i in range(1, len(parts)):
+        parent = ".".join(parts[i:])
+        if parent in DOMAIN_TO_TIER:
+            return DOMAIN_TO_TIER[parent]
+    return 6  # Unknown → T6 (SEO/unverified)
+
+
+def grade_source_authority(result: CollectedResult, golden_data: dict) -> GraderResult:
+    """Source authority: tier-weighted scoring based on T1-T6 credibility hierarchy.
+
+    Score components:
+    - Tier-weighted average (60%): higher tiers = higher score
+    - T1/T2 presence (25%): at least 2 authoritative sources
+    - Tier diversity (15%): sources span multiple tiers (well-rounded research)
+    """
+    sources = result.sources
+    if not sources:
+        return GraderResult(name="source_authority", score=0, weight=0.10, category="code",
+                            details={"no_sources": True}, error_types=["no_sources"])
+
+    tier_counts: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+    tier_examples: dict[int, list[str]] = {t: [] for t in range(1, 7)}
+    tier_scores_list: list[float] = []
+
+    for s in sources:
+        url = s.get("url", "") if isinstance(s, dict) else ""
+        if not url:
+            continue
+        try:
+            domain = urlparse(url).netloc.lower().lstrip("www.")
+            tier = _get_domain_tier(domain)
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+            tier_scores_list.append(TIER_SCORES.get(tier, 10))
+            if len(tier_examples[tier]) < 3:
+                tier_examples[tier].append(domain)
+        except Exception:
+            tier_scores_list.append(10)
+            tier_counts[6] = tier_counts.get(6, 0) + 1
+
+    if not tier_scores_list:
+        return GraderResult(name="source_authority", score=0, weight=0.10, category="code",
+                            details={"no_parseable_sources": True}, error_types=["no_sources"])
+
+    # Component 1: Tier-weighted average (60%)
+    avg_tier_score = sum(tier_scores_list) / len(tier_scores_list)
+
+    # Component 2: T1/T2 presence (25%) — want at least 2
+    t1_t2 = tier_counts.get(1, 0) + tier_counts.get(2, 0)
+    t1_t2_score = min(t1_t2 / 2, 1.0) * 100
+
+    # Component 3: Tier diversity (15%) — sources from 3+ different tiers is ideal
+    active_tiers = sum(1 for t, c in tier_counts.items() if c > 0)
+    diversity_score = min(active_tiers / 3, 1.0) * 100
+
+    score = round(avg_tier_score * 0.60 + t1_t2_score * 0.25 + diversity_score * 0.15, 1)
+
+    error_types = []
+    if t1_t2 == 0:
+        error_types.append("no_authoritative_sources")
+    if tier_counts.get(6, 0) > len(tier_scores_list) * 0.5:
+        error_types.append("majority_unverified_sources")
+
+    # Build readable tier breakdown
+    tier_breakdown = {}
+    for t in range(1, 7):
+        if tier_counts.get(t, 0) > 0:
+            tier_breakdown[f"T{t}"] = {
+                "count": tier_counts[t],
+                "examples": tier_examples[t],
+            }
+
+    return GraderResult(
+        name="source_authority", score=score, weight=0.10, category="code",
+        details={
+            "tier_breakdown": tier_breakdown,
+            "t1_t2_count": t1_t2,
+            "total_sources": len(sources),
+            "avg_tier_score": round(avg_tier_score, 1),
+            "active_tiers": active_tiers,
+        },
+        error_types=error_types,
+    )
+
+
 # ── Output Format ────────────────────────────────
 
 def grade_output_format(result: CollectedResult) -> GraderResult:
@@ -321,45 +415,328 @@ def grade_constraint_compliance(result: CollectedResult, constraints: dict) -> G
 # ── Efficiency ───────────────────────────────────
 
 def grade_efficiency(result: CollectedResult) -> GraderResult:
-    """Efficiency metrics: search count, duration, error count."""
-    search_count = result.hook_metrics.get("search_count", 0)
-    duration = result.duration_s
-    error_count = len(result.error_events)
+    """Multi-factor efficiency: turn, token, and search efficiency."""
+    hm = result.hook_metrics
+    search_count = hm.get("search_count", 0)
+    product_count = hm.get("product_count", 0) or len(result.products) or 1
+    turn_count = hm.get("num_turns", 0) or result.turn_count or 0
+    output_tokens = hm.get("output_tokens", 0) or result.output_tokens or 0
 
-    # Search efficiency (40%): fewer searches = better (capped at 15)
-    if search_count <= 5:
+    # Turn efficiency (40%): under 15 turns = perfect, 40+ = low
+    if turn_count <= 15:
+        turn_score = 1.0
+    elif turn_count <= 40:
+        turn_score = 1.0 - (turn_count - 15) / 50
+    else:
+        turn_score = max(0.1, 1.0 - (turn_count - 15) / 50)
+
+    # Token efficiency (30%): tokens per product — under 2k = great
+    tokens_per_product = output_tokens / max(product_count, 1)
+    if tokens_per_product <= 2000:
+        token_score = 1.0
+    elif tokens_per_product <= 5000:
+        token_score = 1.0 - (tokens_per_product - 2000) / 6000
+    else:
+        token_score = max(0.1, 1.0 - (tokens_per_product - 2000) / 6000)
+
+    # Search efficiency (30%): searches per product — under 3 = great
+    searches_per_product = search_count / max(product_count, 1)
+    if searches_per_product <= 3:
         search_score = 1.0
-    elif search_count <= 15:
-        search_score = 1.0 - (search_count - 5) / 20  # Linear decay
+    elif searches_per_product <= 8:
+        search_score = 1.0 - (searches_per_product - 3) / 10
     else:
-        search_score = max(0.2, 1.0 - (search_count - 5) / 20)
+        search_score = max(0.1, 1.0 - (searches_per_product - 3) / 10)
 
-    # Duration efficiency (30%): under 60s = perfect, 300s+ = low
-    if duration <= 60:
-        duration_score = 1.0
-    elif duration <= 300:
-        duration_score = 1.0 - (duration - 60) / 480
-    else:
-        duration_score = max(0.1, 1.0 - (duration - 60) / 480)
-
-    # Error penalty (30%): any errors = significant penalty
-    error_score = 1.0 if error_count == 0 else max(0, 1.0 - error_count * 0.3)
-
-    score = round((search_score * 0.40 + duration_score * 0.30 + error_score * 0.30) * 100, 1)
+    score = round((turn_score * 0.40 + token_score * 0.30 + search_score * 0.30) * 100, 1)
 
     error_types = []
-    if search_count > 15:
+    if turn_count > 40:
+        error_types.append("excessive_turns")
+    if tokens_per_product > 5000:
+        error_types.append("verbose_output")
+    if searches_per_product > 8:
         error_types.append("excessive_searches")
-    if duration > 300:
-        error_types.append("slow_execution")
-    if error_count > 0:
-        error_types.append(f"errors:{error_count}")
 
     return GraderResult(
         name="efficiency", score=score, weight=0.05, category="code",
         details={
-            "search_count": search_count, "duration_s": round(duration, 1),
-            "error_count": error_count,
+            "turn_count": turn_count, "tokens_per_product": round(tokens_per_product, 0),
+            "searches_per_product": round(searches_per_product, 1),
+            "search_count": search_count, "product_count": product_count,
         },
+        error_types=error_types,
+    )
+
+
+# ── Tool Calls ──────────────────────────────────
+
+# Tool groups that a shopping research agent should use
+REQUIRED_TOOL_PATTERNS = [
+    {
+        "group": "search",
+        "tools": ["WebSearch", "brave_web_search", "search", "tavily_search", "exa_search"],
+        "min_calls": 2,
+        "description": "at least 2 searches",
+    },
+    {
+        "group": "fetch",
+        "tools": ["WebFetch", "firecrawl_scrape", "tavily_extract", "tavily_crawl"],
+        "min_calls": 1,
+        "description": "at least 1 page fetch",
+    },
+]
+
+
+def _count_tool_group(tool_names: list[str], group_tools: list[str]) -> int:
+    """Count how many times tools from a group were called."""
+    group_lower = {t.lower() for t in group_tools}
+    return sum(1 for t in tool_names if t.lower() in group_lower)
+
+
+def _detect_duplicate_fetches(events: list[dict]) -> int:
+    """Count duplicate URL fetches from event stream."""
+    fetched_urls: list[str] = []
+    for ev in events:
+        if ev.get("type") == "search_progress" and ev.get("phase") == "fetch":
+            url = ev.get("query", "")
+            if url:
+                fetched_urls.append(url)
+    return len(fetched_urls) - len(set(fetched_urls))
+
+
+def _check_query_relevance(events: list[dict], case_query: str) -> float:
+    """Check if search queries are relevant to the case query (Jaccard similarity)."""
+    case_words = set(case_query.lower().split())
+    if not case_words:
+        return 1.0
+
+    relevant = 0
+    total = 0
+    for ev in events:
+        if ev.get("type") == "search_progress" and ev.get("phase") in ("search", "searching"):
+            query = ev.get("query", "")
+            if query:
+                total += 1
+                query_words = set(query.lower().split())
+                intersection = case_words & query_words
+                if len(intersection) / max(len(case_words), 1) >= 0.2:
+                    relevant += 1
+
+    return relevant / max(total, 1)
+
+
+def grade_tool_calls(result: CollectedResult, case_query: str = "") -> GraderResult:
+    """Validate required tool usage patterns + parameter constraints.
+
+    Dimensions:
+    - Required tool coverage (30%): each required group present
+    - No duplicate waste (15%): no repeated URL fetches
+    - Query relevance (20%): search queries relate to case query
+    - Tool diversity (15%): 3+ different tool types
+    - Parallel execution (10%): used parallel batches
+    - Error recovery (10%): low failure rate
+    """
+    hm = result.hook_metrics
+    tool_names = result.tool_names or []
+    events = result.events or []
+
+    # Required tool coverage (30%)
+    patterns_met = 0
+    pattern_details = {}
+    for pat in REQUIRED_TOOL_PATTERNS:
+        count = _count_tool_group(tool_names, pat["tools"])
+        met = count >= pat["min_calls"]
+        patterns_met += int(met)
+        pattern_details[pat["group"]] = {"count": count, "required": pat["min_calls"], "met": met}
+    coverage_score = patterns_met / max(len(REQUIRED_TOOL_PATTERNS), 1)
+
+    # No duplicate waste (15%)
+    dup_count = _detect_duplicate_fetches(events)
+    dup_score = 1.0 if dup_count == 0 else max(0, 1.0 - dup_count * 0.25)
+
+    # Query relevance (20%)
+    relevance_score = _check_query_relevance(events, case_query)
+
+    # Tool diversity (15%): unique tool types
+    unique_tools = len(set(t.lower() for t in tool_names))
+    diversity_score = min(unique_tools / 3, 1.0)
+
+    # Parallel execution (10%)
+    avg_batch = hm.get("avg_batch_size", 0)
+    parallel_score = min(avg_batch / 2, 1.0) if avg_batch > 0 else 0
+
+    # Error recovery (10%)
+    tool_call_count = hm.get("tool_call_count", 0) or len(tool_names) or 1
+    failure_count = hm.get("failure_count", 0)
+    error_rate = failure_count / max(tool_call_count, 1)
+    error_score = 1.0 if error_rate < 0.1 else max(0, 1.0 - error_rate)
+
+    score = round((
+        coverage_score * 0.30 +
+        dup_score * 0.15 +
+        relevance_score * 0.20 +
+        diversity_score * 0.15 +
+        parallel_score * 0.10 +
+        error_score * 0.10
+    ) * 100, 1)
+
+    error_types = []
+    for pat in REQUIRED_TOOL_PATTERNS:
+        if not pattern_details[pat["group"]]["met"]:
+            error_types.append(f"missing_tool_group:{pat['group']}")
+    if dup_count > 0:
+        error_types.append(f"duplicate_fetches:{dup_count}")
+    if relevance_score < 0.5:
+        error_types.append("irrelevant_searches")
+
+    return GraderResult(
+        name="tool_calls", score=score, weight=0.05, category="code",
+        details={
+            "patterns": pattern_details,
+            "duplicate_fetches": dup_count,
+            "query_relevance": round(relevance_score, 2),
+            "unique_tools": unique_tools,
+            "avg_batch_size": avg_batch,
+            "error_rate": round(error_rate, 3),
+        },
+        error_types=error_types,
+    )
+
+
+# ── Transcript ──────────────────────────────────
+
+def _detect_search_loops(events: list[dict]) -> int:
+    """Detect consecutive searches that find 0 new entities.
+
+    A "loop" is 3+ consecutive search events where entity_count doesn't increase.
+    """
+    search_events = [
+        ev for ev in events
+        if ev.get("type") == "search_progress" and ev.get("phase") in ("search", "searching")
+    ]
+    if len(search_events) < 3:
+        return 0
+
+    # Track entity counts from hook_metrics snapshots in events
+    loops = 0
+    stale_streak = 0
+    last_entity_count = 0
+
+    for ev in events:
+        if ev.get("type") == "search_progress":
+            cur_entities = ev.get("count", 0)  # product count at this point
+            if cur_entities <= last_entity_count:
+                stale_streak += 1
+            else:
+                stale_streak = 0
+                last_entity_count = cur_entities
+
+            if stale_streak >= 3:
+                loops += 1
+                stale_streak = 0  # reset after detecting one loop
+
+    return loops
+
+
+def grade_transcript(result: CollectedResult) -> GraderResult:
+    """Evaluate conversation flow: turn limits, search loops, completeness, dimension coverage.
+
+    Checks:
+    - within_turn_limit: didn't exceed max turns
+    - no_search_loops: no 3+ consecutive searches with 0 progress
+    - completed_research: agent finished normally (not max_turns_exceeded)
+    - dimension_coverage: explored 4+ of 6 research dimensions
+    """
+    hm = result.hook_metrics
+    max_turns = hm.get("max_turns", 35)
+    turn_count = hm.get("num_turns", 0) or result.turn_count or 0
+    dims_explored = hm.get("dimensions_explored", 0)
+
+    checks = {}
+
+    # Turn limit
+    checks["within_turn_limit"] = turn_count <= max_turns
+
+    # Search loops
+    loop_count = _detect_search_loops(result.events)
+    checks["no_search_loops"] = loop_count == 0
+
+    # Completed research (not cut off)
+    has_guide = len(result.guide_text) > 200
+    has_products = len(result.products) >= 1
+    checks["completed_research"] = has_guide and has_products
+
+    # Dimension coverage (at least 4/6)
+    checks["dimension_coverage"] = dims_explored >= 4
+
+    passed = sum(checks.values())
+    total = len(checks)
+    score = round(passed / total * 100, 1)
+
+    error_types = []
+    if not checks["within_turn_limit"]:
+        error_types.append(f"exceeded_turn_limit:{turn_count}/{max_turns}")
+    if loop_count > 0:
+        error_types.append(f"search_loops:{loop_count}")
+    if not checks["completed_research"]:
+        error_types.append("incomplete_research")
+    if not checks["dimension_coverage"]:
+        error_types.append(f"low_dimension_coverage:{dims_explored}/6")
+
+    return GraderResult(
+        name="transcript", score=score, weight=0.05, category="code",
+        details={
+            "checks": checks,
+            "turn_count": turn_count,
+            "max_turns": max_turns,
+            "search_loops": loop_count,
+            "dimensions_explored": dims_explored,
+        },
+        error_types=error_types,
+    )
+
+
+# ── State Check ─────────────────────────────────
+
+def grade_state_check(result: CollectedResult) -> GraderResult:
+    """Verify agent end-state assertions — did it produce a complete result?
+
+    Expectations:
+    - products_found: at least 3 products
+    - guide_generated: guide text > 500 chars
+    - sources_collected: at least 3 sources
+    - no_unresolved_errors: 0 error events
+    - entities_discovered: at least 2 entities found during research
+    """
+    hm = result.hook_metrics
+
+    expectations = {
+        "products_found": len(result.products) >= 3,
+        "guide_generated": len(result.guide_text) > 500,
+        "sources_collected": len(result.sources) >= 3,
+        "no_unresolved_errors": len(result.error_events) == 0,
+        "entities_discovered": hm.get("entity_count", 0) >= 2,
+    }
+
+    passed = sum(expectations.values())
+    total = len(expectations)
+    score = round(passed / total * 100, 1)
+
+    error_types = []
+    if not expectations["products_found"]:
+        error_types.append(f"few_products:{len(result.products)}")
+    if not expectations["guide_generated"]:
+        error_types.append(f"short_guide:{len(result.guide_text)}")
+    if not expectations["sources_collected"]:
+        error_types.append(f"few_sources:{len(result.sources)}")
+    if not expectations["no_unresolved_errors"]:
+        error_types.append(f"errors:{len(result.error_events)}")
+    if not expectations["entities_discovered"]:
+        error_types.append(f"few_entities:{hm.get('entity_count', 0)}")
+
+    return GraderResult(
+        name="state_check", score=score, weight=0.05, category="code",
+        details={"expectations": expectations},
         error_types=error_types,
     )

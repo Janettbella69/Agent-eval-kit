@@ -17,10 +17,12 @@ from graders.failure_funnel import detect_failure_stage
 from graders.code_graders import (
     grade_rubric_coverage,
     grade_product_matching,
-    grade_source_quality,
+    grade_source_authority,
     grade_output_format,
-    grade_constraint_compliance,
     grade_efficiency,
+    grade_tool_calls,
+    grade_transcript,
+    grade_state_check,
 )
 from graders.l0_structure import grade_structure
 from graders.l0_constraints import grade_constraints
@@ -112,22 +114,28 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         _run_code_grader("rubric_coverage", grade_rubric_coverage, result, golden_data)
     if effective_weights.get("product_matching", 0) > 0:
         _run_code_grader("product_matching", grade_product_matching, result, golden_data)
-    if effective_weights.get("source_quality", 0) > 0:
-        _run_code_grader("source_quality", grade_source_quality, result, golden_data)
+    if effective_weights.get("source_authority", 0) > 0:
+        _run_code_grader("source_authority", grade_source_authority, result, golden_data)
     if effective_weights.get("output_format", 0) > 0:
         _run_code_grader("output_format", grade_output_format, result)
-    if effective_weights.get("constraint_compliance", 0) > 0:
-        _run_code_grader("constraint_compliance", grade_constraint_compliance, result, constraints)
     if effective_weights.get("efficiency", 0) > 0:
         _run_code_grader("efficiency", grade_efficiency, result)
+    if effective_weights.get("tool_calls", 0) > 0:
+        _run_code_grader("tool_calls", grade_tool_calls, result, case.get("query", ""))
+    if effective_weights.get("transcript", 0) > 0:
+        _run_code_grader("transcript", grade_transcript, result)
+    if effective_weights.get("state_check", 0) > 0:
+        _run_code_grader("state_check", grade_state_check, result)
 
     # ── LLM Graders (graceful degradation) ──
+    judge_prompts: dict[str, str] = {}
     if has_llm:
         try:
             from graders.llm_graders import (
                 grade_rubric_compliance,
                 grade_trap_detection,
                 grade_actionability,
+                grade_groundedness,
             )
 
             async def _run_llm_grader_logged(name: str, fn, *args):
@@ -146,6 +154,9 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
                     if r.details.get("reasoning"):
                         log_entry["reasoning_preview"] = str(r.details["reasoning"])[:300]
                     grading_log.append(log_entry)
+                    # Capture judge prompt for traceability
+                    if r.details.get("system_prompt"):
+                        judge_prompts[name] = str(r.details["system_prompt"])[:5000]
                 except Exception as e:
                     grading_log.append({
                         "step": name, "category": "llm", "score": None,
@@ -161,6 +172,9 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
 
             if effective_weights.get("actionability", 0) > 0:
                 await _run_llm_grader_logged("actionability", grade_actionability, result)
+
+            if effective_weights.get("groundedness", 0) > 0:
+                await _run_llm_grader_logged("groundedness", grade_groundedness, result)
         except Exception:
             # LLM graders failed — graceful degradation
             pass
@@ -236,4 +250,5 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         "grading_log": grading_log,
         "gate": {"results": gate_results, "passed": gate_passed},
         "judge_prompt_version": judge_pv,
+        "judge_prompts": judge_prompts,
     }

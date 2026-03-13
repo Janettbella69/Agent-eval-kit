@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { listExperiments } from '../lib/api.ts'
+import { listExperiments, getLangfuseStatus, importProductionTraces } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
-import type { Experiment } from '../types.ts'
+import type { Experiment, LangfuseStatus, ProductionImportResult } from '../types.ts'
 
 function StatCard({
   label,
@@ -44,6 +44,8 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     complete: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
     running: 'bg-blue-50 text-blue-700 border-blue-200/60',
+    importing: 'bg-purple-50 text-purple-700 border-purple-200/60',
+    grading: 'bg-blue-50 text-blue-700 border-blue-200/60',
     paused: 'bg-amber-50 text-amber-700 border-amber-200/60',
     error: 'bg-red-50 text-red-700 border-red-200/60',
     pending: 'bg-slate-50 text-slate-500 border-slate-200/60',
@@ -54,10 +56,14 @@ function StatusBadge({ status }: { status: string }) {
         styles[status] ?? styles.pending
       }`}
     >
-      {status === 'running' && (
+      {['running', 'importing', 'grading'].includes(status) && (
         <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
+          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+            status === 'importing' ? 'bg-purple-400' : 'bg-blue-400'
+          }`} />
+          <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${
+            status === 'importing' ? 'bg-purple-500' : 'bg-blue-500'
+          }`} />
         </span>
       )}
       {status}
@@ -70,9 +76,49 @@ export default function ExperimentsPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Production import state
+  const [showImport, setShowImport] = useState(false)
+  const [lfStatus, setLfStatus] = useState<LangfuseStatus | null>(null)
+  const [importDays, setImportDays] = useState(7)
+  const [importLimit, setImportLimit] = useState(20)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ProductionImportResult | null>(null)
+
   useEffect(() => {
     listExperiments().then(setExperiments).finally(() => setLoading(false))
   }, [])
+
+  const handleOpenImport = async () => {
+    setShowImport(prev => !prev)
+    if (!lfStatus) {
+      try {
+        const status = await getLangfuseStatus()
+        setLfStatus(status)
+      } catch {
+        setLfStatus({ connected: false, reason: 'Failed to reach eval server' })
+      }
+    }
+  }
+
+  const handleImport = async () => {
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const result = await importProductionTraces({
+        limit: importLimit,
+        days: importDays,
+        run_grading: true,
+      })
+      setImportResult(result)
+      // Refresh experiment list
+      const updated = await listExperiments()
+      setExperiments(updated)
+    } catch (e) {
+      setImportResult({ experiment_id: null, traces_imported: 0, traces_skipped: 0, detail: String(e) })
+    } finally {
+      setImporting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -101,6 +147,19 @@ export default function ExperimentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenImport}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${
+              showImport
+                ? 'border-purple-300 bg-purple-50 text-purple-700'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+            }`}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+              cloud_download
+            </span>
+            导入生产
+          </button>
           <button
             onClick={() => navigate('/compare')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
@@ -166,6 +225,99 @@ export default function ExperimentsPage() {
         />
       </div>
 
+      {/* ── Production Import Panel ── */}
+      {showImport && (
+        <div className="rounded-xl bg-white border border-purple-200/80 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-purple-500" style={{ fontSize: '20px' }}>
+                cloud_download
+              </span>
+              <h3 className="text-sm font-semibold text-slate-800">导入生产 Trace（LangFuse）</h3>
+            </div>
+            {lfStatus && (
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                lfStatus.connected
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : 'bg-red-50 text-red-600'
+              }`}>
+                {lfStatus.connected ? 'Connected' : 'Disconnected'}
+              </span>
+            )}
+          </div>
+
+          {lfStatus && !lfStatus.connected && (
+            <p className="text-xs text-red-500">{lfStatus.reason}</p>
+          )}
+
+          <div className="flex items-end gap-4">
+            <div>
+              <label className="text-[11px] text-slate-500 font-medium block mb-1">回溯天数</label>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={importDays}
+                onChange={e => setImportDays(Number(e.target.value))}
+                className="w-20 px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-purple-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 font-medium block mb-1">最多导入</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={importLimit}
+                onChange={e => setImportLimit(Number(e.target.value))}
+                className="w-20 px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-purple-400"
+              />
+            </div>
+            <button
+              onClick={handleImport}
+              disabled={importing || (lfStatus != null && !lfStatus.connected)}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-purple-600 text-sm font-medium text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {importing ? (
+                <>
+                  <span className="material-symbols-outlined animate-spin" style={{ fontSize: '14px' }}>progress_activity</span>
+                  导入中...
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>download</span>
+                  导入并评分
+                </>
+              )}
+            </button>
+          </div>
+
+          {importResult && (
+            <div className={`text-xs px-3 py-2 rounded-lg ${
+              importResult.experiment_id
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-amber-50 text-amber-700'
+            }`}>
+              {importResult.experiment_id ? (
+                <>
+                  导入完成：{importResult.traces_imported} 条 trace
+                  {importResult.traces_skipped > 0 && `（跳过 ${importResult.traces_skipped} 条）`}
+                  {' — '}
+                  <Link
+                    to={`/experiments/${importResult.experiment_id}`}
+                    className="underline font-medium"
+                  >
+                    查看实验 #{importResult.experiment_id}
+                  </Link>
+                </>
+              ) : (
+                importResult.detail || '没有找到匹配的 trace'
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Experiments table ── */}
       <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden">
         <table className="w-full text-sm">
@@ -179,6 +331,12 @@ export default function ExperimentsPage() {
               </th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 数据集
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Mode
+              </th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Commit
               </th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 状态
@@ -220,6 +378,22 @@ export default function ExperimentsPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {e.dataset_id ? `Dataset #${e.dataset_id}` : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  {e.config?.mode ? (
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      e.config.mode === 'production'
+                        ? 'bg-purple-50 text-purple-600'
+                        : e.config.mode === 'product'
+                          ? 'bg-violet-50 text-violet-600'
+                          : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {e.config.mode}
+                    </span>
+                  ) : <span className="text-slate-300 text-xs">—</span>}
+                </td>
+                <td className="px-4 py-3 text-[10px] text-slate-400 font-mono">
+                  {e.config?.git_commit || '—'}
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={e.status} />

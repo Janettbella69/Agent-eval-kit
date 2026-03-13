@@ -1,4 +1,4 @@
-import type { Dataset, Case, Experiment, Trace, ExperimentSummary, SaturationCase, CaseHistoryEntry, GradingLogEntry, HumanScore } from '../types.ts'
+import type { Dataset, Case, Experiment, Trace, ExperimentSummary, SaturationCase, CaseHistoryEntry, GradingLogEntry, HumanScore, JudgeAlignment, CompareResult, CodingAnalysis, AnalysisResult, StalenessReport, ReviewQueueItem, ReviewStats, ProductionImportResult, LangfuseStatus } from '../types.ts'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '') + '/api'
 
@@ -51,6 +51,22 @@ export const regradeExperiment = (id: number) =>
 export const getExperimentSummary = (id: number) =>
   fetchJSON<ExperimentSummary>(`/experiments/${id}/summary`)
 
+// Experiment Comparison
+export const compareExperiments = (baseId: number, targetId: number) =>
+  fetchJSON<CompareResult>(`/experiments/compare?base=${baseId}&target=${targetId}`)
+
+// Dataset Slicing
+export const createDatasetFromExperiment = (body: {
+  experiment_id: number
+  name: string
+  filter: string
+  compare_to?: number
+  description?: string
+}) => fetchJSON<{ dataset_id: number; cases_count: number; filter: string }>(
+  '/datasets/from-experiment',
+  { method: 'POST', body: JSON.stringify(body) },
+)
+
 // Traces
 export const getTrace = (id: number) => fetchJSON<Trace>(`/traces/${id}`)
 export const annotateTrace = (id: number, body: Record<string, unknown>) =>
@@ -66,3 +82,67 @@ export const annotateHumanPass = (traceId: number, passed: boolean) =>
   fetchJSON<{ ok: boolean; passed: boolean }>(`/traces/${traceId}/annotate-pass`, {
     method: 'POST', body: JSON.stringify({ passed }),
   })
+
+// Judge Alignment
+export const getJudgeAlignment = () => fetchJSON<JudgeAlignment>('/traces/alignment')
+
+// Open Codes (qualitative labels)
+export const updateOpenCodes = (traceId: number, add: string[] = [], remove: string[] = []) =>
+  fetchJSON<{ ok: boolean; open_codes: string[] }>(`/traces/${traceId}/codes`, {
+    method: 'POST', body: JSON.stringify({ add, remove }),
+  })
+
+// Coding Analysis
+export const getCodingAnalysis = (experimentId?: number) => {
+  const params = experimentId ? `?experiment_id=${experimentId}` : ''
+  return fetchJSON<CodingAnalysis>(`/traces/coding-analysis${params}`)
+}
+
+// AI Trace Analysis
+export const startTraceAnalysis = (traceIds: number[], question: string) =>
+  fetchJSON<{ request_id: string; status: string }>('/traces/analyze', {
+    method: 'POST', body: JSON.stringify({ trace_ids: traceIds, question }),
+  })
+export const getAnalysisResult = (requestId: string) =>
+  fetchJSON<AnalysisResult>(`/traces/analyze/${requestId}`)
+
+// Dataset Staleness
+export const getDatasetStaleness = (datasetId: number, maxAgeDays: number = 30) =>
+  fetchJSON<StalenessReport>(`/datasets/${datasetId}/staleness?max_age_days=${maxAgeDays}`)
+
+export const validateDatasetCases = (datasetId: number, caseKeys: string[]) =>
+  fetchJSON<{ ok: boolean; validated_count: number }>(`/datasets/${datasetId}/validate`, {
+    method: 'POST', body: JSON.stringify({ case_keys: caseKeys }),
+  })
+
+export const validateAllCases = (datasetId: number) =>
+  fetchJSON<{ ok: boolean; validated_count: number }>(`/datasets/${datasetId}/validate`, {
+    method: 'POST', body: JSON.stringify({ all: true }),
+  })
+
+// Transcript Review
+export const getReviewQueue = (n: number = 10, experimentId?: number, strategy: string = 'mixed') => {
+  const params = new URLSearchParams({ n: String(n), strategy })
+  if (experimentId != null) params.set('experiment_id', String(experimentId))
+  return fetchJSON<{ traces: ReviewQueueItem[]; count: number; strategy: string }>(`/traces/review-queue?${params}`)
+}
+
+export const updateReviewStatus = (traceId: number, status: string, notes: string = '') =>
+  fetchJSON<{ ok: boolean; review_status: string }>(`/traces/${traceId}/review`, {
+    method: 'POST', body: JSON.stringify({ status, notes }),
+  })
+
+export const getReviewStats = () => fetchJSON<ReviewStats>('/traces/review-stats')
+
+// Production Import (LangFuse → Eval)
+export const getLangfuseStatus = () => fetchJSON<LangfuseStatus>('/production/status')
+
+export const importProductionTraces = (body: {
+  limit?: number
+  days?: number
+  tag?: string
+  run_grading?: boolean
+  experiment_tag?: string
+}) => fetchJSON<ProductionImportResult>('/production/import', {
+  method: 'POST', body: JSON.stringify(body),
+})

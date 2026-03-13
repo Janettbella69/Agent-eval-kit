@@ -1,6 +1,7 @@
 """CRUD operations for eval platform storage."""
 
 import json
+import time
 from collections import defaultdict
 from statistics import median, stdev
 
@@ -150,12 +151,19 @@ def _row_to_case(r) -> Case:
     except (json.JSONDecodeError, TypeError):
         reference_output = None
 
+    # last_validated_at (migration-safe)
+    try:
+        last_validated_at = r["last_validated_at"] or 0
+    except (IndexError, KeyError):
+        last_validated_at = 0
+
     return Case(
         id=r["id"], dataset_id=r["dataset_id"], key=r["key"],
         query=r["query"], type=r["type"],
         constraints=json.loads(r["constraints"]),
         golden_data=golden_data,
         reference_output=reference_output,
+        last_validated_at=last_validated_at,
     )
 
 
@@ -235,7 +243,7 @@ async def update_trace(trace_id: int, **kwargs):
     json_fields = {"products", "sources", "events", "hook_metrics",
                    "error_events", "clarification", "l0_scores", "l1_scores", "l2_scores",
                    "composite_scores", "failure_funnel", "error_types",
-                   "human_scores", "grading_log"}
+                   "human_scores", "grading_log", "tool_names", "judge_prompts"}
     sets = []
     values = []
     for key, val in kwargs.items():
@@ -320,6 +328,16 @@ def _row_to_trace(r) -> Trace:
         model=_safe_get(r, "model", "") or "",
         judge_prompt_version=_safe_get(r, "judge_prompt_version", "") or "",
         human_pass=bool(_safe_get(r, "human_pass", None)) if _safe_get(r, "human_pass", None) is not None else None,
+        input_tokens=_safe_get(r, "input_tokens", 0) or 0,
+        output_tokens=_safe_get(r, "output_tokens", 0) or 0,
+        turn_count=_safe_get(r, "turn_count", 0) or 0,
+        system_prompt=_safe_get(r, "system_prompt", "") or "",
+        tool_names=_parse(_safe_get(r, "tool_names", "[]"), []),
+        judge_prompts=_parse(_safe_get(r, "judge_prompts", "{}"), {}),
+        open_codes=_parse(_safe_get(r, "open_codes", "[]"), []),
+        review_status=_safe_get(r, "review_status", "pending") or "pending",
+        reviewed_at=_safe_get(r, "reviewed_at", None),
+        review_notes=_safe_get(r, "review_notes", "") or "",
         created_at=r["created_at"] or 0,
     )
 
@@ -397,6 +415,11 @@ async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
                 count += 1
         pass_pow_k[f"pass^{k}"] = round(count / total_cases_unique, 3)
 
+    # Tracked metrics: turns, tokens, toolcalls
+    turns = [t.turn_count for t in completed if t.turn_count > 0]
+    tokens = [t.input_tokens + t.output_tokens for t in completed if t.input_tokens + t.output_tokens > 0]
+    toolcalls = [len(t.tool_names) for t in completed]
+
     return ExperimentSummary(
         total_cases=len(traces),
         completed=len(completed),
@@ -406,6 +429,9 @@ async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
         avg_score=round(sum(scores) / len(scores), 1) if scores else 0,
         median_score=round(median(scores), 1) if scores else 0,
         avg_duration=round(sum(durations) / len(durations), 1) if durations else 0,
+        avg_turns=round(sum(turns) / len(turns), 1) if turns else 0,
+        avg_tokens=round(sum(tokens) / len(tokens), 0) if tokens else 0,
+        avg_toolcalls=round(sum(toolcalls) / len(toolcalls), 1) if toolcalls else 0,
         pass_rate=round(pass_at_1_count / total_cases_unique, 3) if case_trials else 0,
         pass_all_rate=round(pass_all_count / total_cases_unique, 3) if case_trials else 0,
         consistency_rate=round(sum(consistency_scores) / len(consistency_scores), 1) if consistency_scores else 0,
@@ -414,6 +440,70 @@ async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
         pass_at_k=pass_at_k,
         pass_pow_k=pass_pow_k,
     )
+
+
+# ── Judge Alignment (TPR/TNR) ─────────────────
+
+async def compute_judge_alignment() -> dict:
+    """Compute TPR/TNR of auto grading vs human PASS/FAIL labels.
+
+    Uses Rogan-Gladen formula to correct observed pass rate for judge bias.
+    """
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT final_pass, human_pass
+           FROM traces
+           WHERE human_pass IS NOT NULL AND status IN ('done', 'graded')"""
+    )
+    if not rows:
+        return {"total_labeled": 0}
+
+    tp = fp = tn = fn = 0
+    for r in rows:
+        human = bool(r["human_pass"])
+        auto = bool(r["final_pass"])
+        if human and auto:
+            tp += 1
+        elif human and not auto:
+            fn += 1
+        elif not human and auto:
+            fp += 1
+        else:
+            tn += 1
+
+    tpr = tp / (tp + fn) if (tp + fn) > 0 else None
+    tnr = tn / (tn + fp) if (tn + fp) > 0 else None
+
+    # Rogan-Gladen bias correction on ALL traces
+    corrected_pass_rate = None
+    total_all = 0
+    passed_all = 0
+    if tpr is not None and tnr is not None:
+        denom = tpr + tnr - 1
+        if abs(denom) > 1e-6:
+            all_rows = await db.execute_fetchall(
+                """SELECT COUNT(*) as total,
+                          SUM(CASE WHEN final_pass THEN 1 ELSE 0 END) as passed
+                   FROM traces WHERE status IN ('done', 'graded')"""
+            )
+            if all_rows and all_rows[0]["total"] > 0:
+                total_all = all_rows[0]["total"]
+                passed_all = all_rows[0]["passed"]
+                p_obs = passed_all / total_all
+                corrected = (p_obs + tnr - 1) / denom
+                corrected_pass_rate = max(0.0, min(1.0, corrected))
+
+    return {
+        "total_labeled": len(rows),
+        "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+        "tpr": round(tpr, 3) if tpr is not None else None,
+        "tnr": round(tnr, 3) if tnr is not None else None,
+        "human_pass_rate": round((tp + fn) / len(rows), 3),
+        "auto_pass_rate": round((tp + fp) / len(rows), 3),
+        "total_traces": total_all,
+        "observed_pass_rate": round(passed_all / total_all, 3) if total_all else None,
+        "corrected_pass_rate": round(corrected_pass_rate, 3) if corrected_pass_rate is not None else None,
+    }
 
 
 # ── Human Annotation ────────────────────────────
@@ -465,6 +555,303 @@ async def get_case_history(case_key: str, dataset_id: int | None = None) -> list
     return [dict(r) for r in rows]
 
 
+async def compare_experiments(base_id: int, target_id: int) -> dict:
+    """Compare two experiments case-by-case.
+
+    For each case_key present in either experiment, computes the average score
+    across trials and classifies the delta as improved/regressed/unchanged.
+
+    Returns:
+        {
+            "base": {"id", "tag", "avg_score", "pass_rate"},
+            "target": {"id", "tag", "avg_score", "pass_rate"},
+            "cases": [{"case_key", "base_score", "target_score", "delta",
+                        "base_pass", "target_pass", "status"}],
+            "summary": {"improved", "regressed", "unchanged", "new", "removed",
+                         "net_delta", "base_avg", "target_avg"}
+        }
+    """
+    REGRESSION_THRESHOLD = 5  # score points
+
+    db = await get_db()
+
+    # Fetch average scores per case_key for each experiment
+    async def _case_avgs(exp_id: int) -> dict[str, dict]:
+        rows = await db.execute_fetchall(
+            """SELECT case_key, query, case_type,
+                      AVG(final_score) as avg_score,
+                      MAX(final_pass) as any_pass,
+                      COUNT(*) as n_trials
+               FROM traces
+               WHERE experiment_id = ? AND status IN ('done', 'graded', 'collected')
+               GROUP BY case_key""",
+            (exp_id,),
+        )
+        return {
+            r["case_key"]: {
+                "score": round(r["avg_score"], 2) if r["avg_score"] else 0,
+                "pass": bool(r["any_pass"]),
+                "query": r["query"],
+                "case_type": r["case_type"],
+                "n_trials": r["n_trials"],
+            }
+            for r in rows
+        }
+
+    base_avgs = await _case_avgs(base_id)
+    target_avgs = await _case_avgs(target_id)
+
+    all_keys = sorted(set(base_avgs.keys()) | set(target_avgs.keys()))
+
+    cases = []
+    improved = regressed = unchanged = new_cases = removed = 0
+    base_scores = []
+    target_scores = []
+
+    for key in all_keys:
+        b = base_avgs.get(key)
+        t = target_avgs.get(key)
+
+        if b and t:
+            delta = round(t["score"] - b["score"], 2)
+            if delta > REGRESSION_THRESHOLD:
+                status = "improved"
+                improved += 1
+            elif delta < -REGRESSION_THRESHOLD:
+                status = "regressed"
+                regressed += 1
+            else:
+                status = "unchanged"
+                unchanged += 1
+            base_scores.append(b["score"])
+            target_scores.append(t["score"])
+        elif t and not b:
+            delta = None
+            status = "new"
+            new_cases += 1
+            target_scores.append(t["score"])
+        else:
+            delta = None
+            status = "removed"
+            removed += 1
+            base_scores.append(b["score"])  # type: ignore
+
+        cases.append({
+            "case_key": key,
+            "query": (t or b or {}).get("query", ""),
+            "case_type": (t or b or {}).get("case_type", ""),
+            "base_score": b["score"] if b else None,
+            "target_score": t["score"] if t else None,
+            "delta": delta,
+            "base_pass": b["pass"] if b else None,
+            "target_pass": t["pass"] if t else None,
+            "status": status,
+        })
+
+    # Sort: regressed first, then by delta ascending
+    status_order = {"regressed": 0, "new": 1, "unchanged": 2, "improved": 3, "removed": 4}
+    cases.sort(key=lambda c: (status_order.get(c["status"], 9), c.get("delta") or 0))
+
+    # Fetch experiment tags
+    base_exp = await get_experiment(base_id)
+    target_exp = await get_experiment(target_id)
+
+    base_avg = round(sum(base_scores) / len(base_scores), 2) if base_scores else 0
+    target_avg = round(sum(target_scores) / len(target_scores), 2) if target_scores else 0
+
+    return {
+        "base": {
+            "id": base_id,
+            "tag": base_exp.tag if base_exp else "",
+            "avg_score": base_avg,
+            "pass_rate": round(sum(1 for c in cases if c.get("base_pass")) / max(len(base_avgs), 1), 3),
+        },
+        "target": {
+            "id": target_id,
+            "tag": target_exp.tag if target_exp else "",
+            "avg_score": target_avg,
+            "pass_rate": round(sum(1 for c in cases if c.get("target_pass")) / max(len(target_avgs), 1), 3),
+        },
+        "cases": cases,
+        "summary": {
+            "improved": improved,
+            "regressed": regressed,
+            "unchanged": unchanged,
+            "new": new_cases,
+            "removed": removed,
+            "net_delta": round(target_avg - base_avg, 2),
+            "base_avg": base_avg,
+            "target_avg": target_avg,
+        },
+    }
+
+
+async def create_dataset_from_experiment(
+    experiment_id: int,
+    name: str,
+    filter_type: str = "failed",
+    compare_to: int | None = None,
+    description: str = "",
+) -> dict:
+    """Create a debug dataset from experiment results.
+
+    Args:
+        experiment_id: Source experiment.
+        name: New dataset name.
+        filter_type: "failed" | "passed" | "regressed" | "improved"
+        compare_to: Required for "regressed"/"improved" — the base experiment to compare against.
+        description: Optional description.
+
+    Returns:
+        {"dataset_id": int, "cases_count": int, "filter": str}
+    """
+    experiment = await get_experiment(experiment_id)
+    if not experiment:
+        return {"error": "Experiment not found"}
+
+    # Get all original cases from the dataset
+    all_cases = await get_cases(experiment.dataset_id)
+    case_map = {c.key: c for c in all_cases}
+
+    if filter_type in ("regressed", "improved") and compare_to:
+        # Compare-based filtering
+        comparison = await compare_experiments(compare_to, experiment_id)
+        target_status = filter_type  # "regressed" or "improved"
+        selected_keys = [c["case_key"] for c in comparison["cases"] if c["status"] == target_status]
+    else:
+        # Single-experiment filtering
+        traces = await get_experiment_traces(experiment_id)
+
+        # Group by case_key, use best trial result
+        case_results: dict[str, bool] = {}
+        for t in traces:
+            if t.status not in ("done", "graded", "collected"):
+                continue
+            key = t.case_key
+            if filter_type == "failed":
+                # Case is "failed" if no trial passed
+                if key not in case_results:
+                    case_results[key] = False
+                if t.final_pass:
+                    case_results[key] = True
+            elif filter_type == "passed":
+                if key not in case_results:
+                    case_results[key] = False
+                if t.final_pass:
+                    case_results[key] = True
+
+        if filter_type == "failed":
+            selected_keys = [k for k, passed in case_results.items() if not passed]
+        elif filter_type == "passed":
+            selected_keys = [k for k, passed in case_results.items() if passed]
+        else:
+            selected_keys = list(case_results.keys())
+
+    # Create new dataset with selected cases
+    if not description:
+        description = f"Debug dataset from experiment #{experiment_id} (filter: {filter_type})"
+
+    dataset_id = await create_dataset(name, description, "regression")
+
+    count = 0
+    for key in selected_keys:
+        case = case_map.get(key)
+        if case:
+            await upsert_case(
+                dataset_id, case.key, case.query, case.type,
+                case.constraints, case.golden_data, case.reference_output,
+            )
+            count += 1
+
+    return {"dataset_id": dataset_id, "cases_count": count, "filter": filter_type}
+
+
+# ── Dataset Staleness ─────────────────────────────
+
+async def get_staleness_report(dataset_id: int, max_age_days: int = 30) -> dict:
+    """Check dataset freshness: which cases have stale or never-validated golden data.
+
+    Args:
+        dataset_id: Target dataset.
+        max_age_days: Cases validated more than this many days ago are "stale".
+
+    Returns:
+        {
+            "total_cases": int,
+            "validated": int,        # cases with last_validated_at > 0
+            "stale": int,            # validated but older than max_age_days
+            "never_validated": int,   # last_validated_at == 0
+            "fresh": int,            # validated and within max_age_days
+            "staleness_pct": float,  # (stale + never_validated) / total
+            "cases": [{"key", "query", "last_validated_at", "status", "age_days"}]
+        }
+    """
+    import time
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        "SELECT key, query, last_validated_at FROM cases WHERE dataset_id = ? ORDER BY last_validated_at ASC",
+        (dataset_id,),
+    )
+
+    now = time.time()
+    threshold = now - (max_age_days * 86400)
+    cases = []
+    validated = stale = never_validated = fresh = 0
+
+    for r in rows:
+        lv = r["last_validated_at"] or 0
+        if lv == 0:
+            status = "never_validated"
+            never_validated += 1
+            age_days = None
+        elif lv < threshold:
+            status = "stale"
+            stale += 1
+            age_days = round((now - lv) / 86400, 1)
+            validated += 1
+        else:
+            status = "fresh"
+            fresh += 1
+            age_days = round((now - lv) / 86400, 1)
+            validated += 1
+
+        cases.append({
+            "key": r["key"],
+            "query": r["query"],
+            "last_validated_at": lv,
+            "status": status,
+            "age_days": age_days,
+        })
+
+    total = len(rows)
+    return {
+        "total_cases": total,
+        "validated": validated,
+        "stale": stale,
+        "never_validated": never_validated,
+        "fresh": fresh,
+        "staleness_pct": round((stale + never_validated) / total, 3) if total else 0,
+        "max_age_days": max_age_days,
+        "cases": cases,
+    }
+
+
+async def validate_cases(dataset_id: int, case_keys: list[str]) -> int:
+    """Mark cases as freshly validated (update last_validated_at to now)."""
+    import time
+    db = await get_db()
+    now = time.time()
+    count = 0
+    for key in case_keys:
+        cursor = await db.execute(
+            "UPDATE cases SET last_validated_at = ? WHERE dataset_id = ? AND key = ?",
+            (now, dataset_id, key),
+        )
+        count += cursor.rowcount
+    await db.commit()
+    return count
+
+
 async def get_saturation_summary(dataset_id: int) -> list[dict]:
     """Get per-case pass rate across all experiments for saturation monitoring."""
     db = await get_db()
@@ -495,3 +882,101 @@ async def get_saturation_summary(dataset_id: int) -> list[dict]:
             "saturated": passes == total and total >= 3,  # 100% pass with 3+ trials
         })
     return result
+
+
+# ── Transcript Review ───────────────────────────
+
+async def sample_review_queue(
+    n: int = 10,
+    experiment_id: int | None = None,
+    strategy: str = "mixed",
+) -> list[dict]:
+    """Sample traces for human transcript review.
+
+    Strategies:
+        random: pure random sample
+        mixed: stratified — 40% failed, 30% borderline (score 40-70), 30% passed
+        failures: only failed traces
+    """
+    db = await get_db()
+
+    base_where = "status IN ('done', 'graded', 'collected') AND review_status = 'pending'"
+    params: list = []
+    if experiment_id:
+        base_where += " AND experiment_id = ?"
+        params.append(experiment_id)
+
+    if strategy == "failures":
+        sql = f"""SELECT id, case_key, final_score, final_pass, experiment_id, duration_s, case_type
+                  FROM traces WHERE {base_where} AND final_pass = 0
+                  ORDER BY RANDOM() LIMIT ?"""
+        params.append(n)
+        rows = await db.execute_fetchall(sql, params)
+
+    elif strategy == "mixed":
+        # Stratified: 40% failed, 30% borderline, 30% passed
+        n_fail = max(1, int(n * 0.4))
+        n_border = max(1, int(n * 0.3))
+        n_pass = n - n_fail - n_border
+
+        rows = []
+        for condition, limit in [
+            ("AND final_pass = 0", n_fail),
+            ("AND final_score >= 40 AND final_score <= 70", n_border),
+            ("AND final_pass = 1 AND final_score > 70", n_pass),
+        ]:
+            sql = f"""SELECT id, case_key, final_score, final_pass, experiment_id, duration_s, case_type
+                      FROM traces WHERE {base_where} {condition}
+                      ORDER BY RANDOM() LIMIT ?"""
+            r = await db.execute_fetchall(sql, params + [limit])
+            rows.extend(r)
+
+    else:  # random
+        sql = f"""SELECT id, case_key, final_score, final_pass, experiment_id, duration_s, case_type
+                  FROM traces WHERE {base_where}
+                  ORDER BY RANDOM() LIMIT ?"""
+        params.append(n)
+        rows = await db.execute_fetchall(sql, params)
+
+    return [
+        {
+            "trace_id": r["id"],
+            "case_key": r["case_key"],
+            "score": r["final_score"],
+            "passed": bool(r["final_pass"]),
+            "experiment_id": r["experiment_id"],
+            "duration_s": r["duration_s"],
+            "case_type": r["case_type"],
+        }
+        for r in rows
+    ]
+
+
+async def update_review_status(
+    trace_id: int, status: str, notes: str = ""
+) -> None:
+    """Mark a trace as reviewed or flagged."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE traces SET review_status = ?, reviewed_at = ?, review_notes = ? WHERE id = ?",
+        (status, time.time(), notes, trace_id),
+    )
+    await db.commit()
+
+
+async def get_review_stats() -> dict:
+    """Get review coverage statistics."""
+    db = await get_db()
+    total = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE status IN ('done', 'graded', 'collected')")
+    reviewed = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'reviewed'")
+    flagged = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'flagged'")
+    pending = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'pending' AND status IN ('done', 'graded', 'collected')")
+
+    t = total["n"] if total else 0
+    return {
+        "total": t,
+        "reviewed": reviewed["n"] if reviewed else 0,
+        "flagged": flagged["n"] if flagged else 0,
+        "pending": pending["n"] if pending else 0,
+        "coverage_pct": round((reviewed["n"] if reviewed else 0) / max(t, 1) * 100, 1),
+    }

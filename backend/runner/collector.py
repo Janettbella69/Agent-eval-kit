@@ -25,6 +25,15 @@ class CollectedResult:
     duration_s: float = 0.0
     prompt_version: str = ""
     model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    turn_count: int = 0
+    system_prompt: str = ""
+    tool_names: list[str] = field(default_factory=list)
+    # Latency timestamps (seconds from request start)
+    time_to_first_search: float = 0.0
+    time_to_first_product: float = 0.0
+    time_to_first_text: float = 0.0
 
 
 async def collect_sse(
@@ -86,16 +95,23 @@ async def collect_sse(
 
                     event_type = event.get("type", "")
                     result.events.append(event)
+                    elapsed = time.monotonic() - t0
 
                     if event_type == "text_delta":
+                        if result.time_to_first_text == 0.0:
+                            result.time_to_first_text = round(elapsed, 2)
                         guide_parts.append(event.get("content", ""))
 
                     elif event_type == "text":
+                        if result.time_to_first_text == 0.0:
+                            result.time_to_first_text = round(elapsed, 2)
                         guide_parts.append(event.get("content", ""))
 
                     elif event_type == "product_found":
                         product = event.get("product", {})
                         if product:
+                            if result.time_to_first_product == 0.0:
+                                result.time_to_first_product = round(elapsed, 2)
                             result.products.append(product)
 
                     elif event_type == "sources":
@@ -108,6 +124,10 @@ async def collect_sse(
                         if isinstance(raw, list):
                             result.sources.extend(raw)
 
+                    elif event_type == "search_progress":
+                        if result.time_to_first_search == 0.0:
+                            result.time_to_first_search = round(elapsed, 2)
+
                     elif event_type == "clarification":
                         result.clarification = event.get("question", event)
 
@@ -118,6 +138,11 @@ async def collect_sse(
                         result.hook_metrics = event.get("hook_metrics", {})
                         result.prompt_version = event.get("prompt_version", "")
                         result.model = event.get("model", "")
+                        result.input_tokens = event.get("input_tokens", 0)
+                        result.output_tokens = event.get("output_tokens", 0)
+                        result.turn_count = event.get("turn_count", 0)
+                        result.system_prompt = event.get("system_prompt", "")
+                        result.tool_names = event.get("tool_names", [])
 
                     elif event_type == "done":
                         pass  # stream will end

@@ -45,6 +45,11 @@ COLLECT_TIMEOUT = int(os.getenv("COLLECT_TIMEOUT", "900"))
 HOST = os.getenv("EVAL_HOST", "0.0.0.0")
 PORT = int(os.getenv("EVAL_PORT", "8100"))
 
+# LangFuse import (reads from product backend's .env)
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_BASE_URL = os.getenv("LANGFUSE_BASE_URL", "https://us.cloud.langfuse.com")
+
 
 # Judge prompt version hash — computed from grader prompts at startup
 def _compute_judge_prompt_hash() -> str:

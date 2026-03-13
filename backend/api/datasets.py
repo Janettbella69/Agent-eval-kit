@@ -86,6 +86,45 @@ async def import_dataset(body: DatasetIn | None = None, name: str | None = None)
     return {"dataset_id": dataset_id, "name": dataset_name, "cases_imported": count}
 
 
+@router.post("/from-experiment")
+async def create_dataset_from_experiment(body: dict):
+    """Create a debug dataset by filtering cases from an experiment.
+
+    Body:
+        experiment_id: int — source experiment
+        name: str — new dataset name
+        filter: str — "failed" | "passed" | "regressed" | "improved"
+        compare_to: int | None — base experiment for regressed/improved filter
+        description: str — optional
+    """
+    experiment_id = body.get("experiment_id")
+    name = body.get("name")
+    filter_type = body.get("filter", "failed")
+    compare_to = body.get("compare_to")
+    description = body.get("description", "")
+
+    if not experiment_id or not name:
+        return JSONResponse(status_code=422, content={"detail": "experiment_id and name are required."})
+
+    if filter_type in ("regressed", "improved") and not compare_to:
+        return JSONResponse(status_code=422, content={
+            "detail": f"compare_to is required for filter type '{filter_type}'."
+        })
+
+    result = await queries.create_dataset_from_experiment(
+        experiment_id=experiment_id,
+        name=name,
+        filter_type=filter_type,
+        compare_to=compare_to,
+        description=description,
+    )
+
+    if "error" in result:
+        return JSONResponse(status_code=404, content={"detail": result["error"]})
+
+    return result
+
+
 @router.patch("/{dataset_id}")
 async def update_dataset(dataset_id: int, body: dict):
     """Update dataset metadata (suite_type, description)."""
@@ -100,6 +139,44 @@ async def update_dataset(dataset_id: int, body: dict):
 
     await queries.update_dataset(dataset_id, **updates)
     return {"ok": True, "updated": list(updates.keys())}
+
+
+@router.get("/{dataset_id}/staleness")
+async def get_dataset_staleness(dataset_id: int, max_age_days: int = 30):
+    """Check which cases have stale or never-validated golden data.
+
+    Query params:
+        max_age_days: Cases older than this are "stale" (default 30).
+    """
+    dataset = await queries.get_dataset(dataset_id)
+    if not dataset:
+        return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
+    return await queries.get_staleness_report(dataset_id, max_age_days)
+
+
+@router.post("/{dataset_id}/validate")
+async def validate_dataset_cases(dataset_id: int, body: dict):
+    """Mark cases as freshly validated.
+
+    Body:
+        case_keys: list[str] — keys to mark as validated
+        all: bool — if true, validate all cases in the dataset
+    """
+    dataset = await queries.get_dataset(dataset_id)
+    if not dataset:
+        return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
+
+    if body.get("all"):
+        cases = await queries.get_cases(dataset_id)
+        case_keys = [c.key for c in cases]
+    else:
+        case_keys = body.get("case_keys", [])
+
+    if not case_keys:
+        return JSONResponse(status_code=422, content={"detail": "No case_keys provided."})
+
+    count = await queries.validate_cases(dataset_id, case_keys)
+    return {"ok": True, "validated_count": count}
 
 
 @router.get("/{dataset_id}/saturation")

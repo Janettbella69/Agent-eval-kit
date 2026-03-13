@@ -37,6 +37,7 @@ class Case(BaseModel):
     constraints: dict = {}
     golden_data: dict = {}
     reference_output: dict | None = None
+    last_validated_at: float = 0  # Unix timestamp of last human validation
 
 
 class ExperimentIn(BaseModel):
@@ -46,6 +47,8 @@ class ExperimentIn(BaseModel):
     trials: int = 1
     concurrency: int = 1
     judge_enabled: bool = False
+    notes: str = ""                 # free-text notes about this experiment
+    mode: str = "benchmark"         # "benchmark" (with hints, 5min) or "product" (no hints, 10min)
 
 
 class Experiment(BaseModel):
@@ -90,6 +93,16 @@ class Trace(BaseModel):
     model: str = ""
     judge_prompt_version: str = ""
     human_pass: bool | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    turn_count: int = 0
+    system_prompt: str = ""
+    tool_names: list[str] = []
+    judge_prompts: dict = {}
+    open_codes: list[str] = []      # qualitative labels (e.g. "formula-error", "multi-sheet-misunderstanding")
+    review_status: str = "pending"  # pending | reviewed | flagged
+    reviewed_at: float | None = None
+    review_notes: str = ""
     created_at: float = 0
 
 
@@ -102,9 +115,12 @@ class ExperimentSummary(BaseModel):
     avg_score: float = 0
     median_score: float = 0
     avg_duration: float = 0
-    pass_rate: float = 0          # pass@1
-    pass_all_rate: float = 0      # pass^k (all trials pass)
-    consistency_rate: float = 0   # consistency@k (score std dev)
+    avg_turns: float = 0           # average turn_count
+    avg_tokens: float = 0          # average total tokens (input + output)
+    avg_toolcalls: float = 0       # average tool call count
+    pass_rate: float = 0           # pass@1
+    pass_all_rate: float = 0       # pass^k (all trials pass)
+    consistency_rate: float = 0    # consistency@k (score std dev)
     failure_funnel_dist: dict = {}  # {understand: 3, search: 5, ...}
     grader_averages: dict = {}      # {rubric_coverage: 72.3, ...}
     pass_at_k: dict = {}            # {"pass@1": 0.75, "pass@3": 0.92, ...}
