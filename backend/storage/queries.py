@@ -316,6 +316,10 @@ def _row_to_trace(r) -> Trace:
         grading_duration_s=_safe_get(r, "grading_duration_s", 0) or 0,
         human_scores=_parse(_safe_get(r, "human_scores", "{}"), {}),
         grading_log=_parse(_safe_get(r, "grading_log", "[]"), []),
+        prompt_version=_safe_get(r, "prompt_version", "") or "",
+        model=_safe_get(r, "model", "") or "",
+        judge_prompt_version=_safe_get(r, "judge_prompt_version", "") or "",
+        human_pass=bool(_safe_get(r, "human_pass", None)) if _safe_get(r, "human_pass", None) is not None else None,
         created_at=r["created_at"] or 0,
     )
 
@@ -426,6 +430,11 @@ async def annotate_trace(trace_id: int, grader_name: str, human_score: float,
         "reasoning": human_reasoning,
     }
     await update_trace(trace_id, human_scores=scores)
+
+
+async def annotate_trace_human_pass(trace_id: int, passed: bool) -> None:
+    """Save human PASS/FAIL verdict for a trace."""
+    await update_trace(trace_id, human_pass=int(passed))
 
 
 # ── Case History (Saturation Tracking) ──────────

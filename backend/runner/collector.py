@@ -23,6 +23,8 @@ class CollectedResult:
     error_events: list[dict] = field(default_factory=list)
     clarification: dict | None = None
     duration_s: float = 0.0
+    prompt_version: str = ""
+    model: str = ""
 
 
 async def collect_sse(
@@ -114,6 +116,8 @@ async def collect_sse(
 
                     elif event_type == "eval_meta":
                         result.hook_metrics = event.get("hook_metrics", {})
+                        result.prompt_version = event.get("prompt_version", "")
+                        result.model = event.get("model", "")
 
                     elif event_type == "done":
                         pass  # stream will end

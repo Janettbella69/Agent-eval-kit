@@ -82,6 +82,11 @@ _MIGRATIONS = [
     "ALTER TABLE traces ADD COLUMN human_scores TEXT DEFAULT '{}'",
     # Phase 2: grading_log on traces (per-grader execution log)
     "ALTER TABLE traces ADD COLUMN grading_log TEXT DEFAULT '[]'",
+    # Phase 3: prompt version tracking + human pass/fail
+    "ALTER TABLE traces ADD COLUMN prompt_version TEXT DEFAULT ''",
+    "ALTER TABLE traces ADD COLUMN model TEXT DEFAULT ''",
+    "ALTER TABLE traces ADD COLUMN judge_prompt_version TEXT DEFAULT ''",
+    "ALTER TABLE traces ADD COLUMN human_pass INTEGER",
 ]
 
 

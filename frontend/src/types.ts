@@ -109,6 +109,10 @@ export interface Trace {
   grading_duration_s: number
   human_scores: Record<string, HumanScore>
   grading_log: GradingLogEntry[]
+  prompt_version: string
+  model: string
+  judge_prompt_version: string
+  human_pass: boolean | null
   created_at: number
 }
 

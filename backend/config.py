@@ -1,5 +1,6 @@
 """Eval platform configuration — independent of product backend."""
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -43,3 +44,19 @@ COLLECT_TIMEOUT = int(os.getenv("COLLECT_TIMEOUT", "900"))
 # Server
 HOST = os.getenv("EVAL_HOST", "0.0.0.0")
 PORT = int(os.getenv("EVAL_PORT", "8100"))
+
+
+# Judge prompt version hash — computed from grader prompts at startup
+def _compute_judge_prompt_hash() -> str:
+    """SHA-256 of all judge-related prompt files, truncated to 12 hex chars."""
+    h = hashlib.sha256()
+    grader_dir = Path(__file__).parent
+    for filename in sorted(["graders/llm_graders.py", "agent/eval_agent.py"]):
+        filepath = grader_dir / filename
+        try:
+            h.update(filepath.read_bytes())
+        except FileNotFoundError:
+            pass
+    return h.hexdigest()[:12]
+
+JUDGE_PROMPT_VERSION = _compute_judge_prompt_hash()

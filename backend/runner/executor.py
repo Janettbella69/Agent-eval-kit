@@ -79,6 +79,8 @@ def _result_to_trace_data(result: CollectedResult, case: dict, trial_num: int) -
         "hook_metrics": result.hook_metrics,
         "error_events": result.error_events,
         "clarification": result.clarification,
+        "prompt_version": result.prompt_version,
+        "model": result.model,
     }
 
 
@@ -235,6 +237,7 @@ async def run_experiment(
                     "error_types": grades.get("error_types", []),
                     "grading_duration_s": grades.get("grading_duration_s", 0),
                     "grading_log": grades.get("grading_log", []),
+                    "judge_prompt_version": grades.get("judge_prompt_version", ""),
                 })
 
                 manager.broadcast(experiment_id, {
@@ -303,6 +306,7 @@ async def regrade_experiment(experiment_id: int) -> int:
                 "error_types": grades.get("error_types", []),
                 "grading_duration_s": grades.get("grading_duration_s", 0),
                 "grading_log": grades.get("grading_log", []),
+                "judge_prompt_version": grades.get("judge_prompt_version", ""),
             })
             count += 1
         except Exception:

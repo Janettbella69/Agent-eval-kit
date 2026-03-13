@@ -38,6 +38,10 @@ def _build_operation_log(result: CollectedResult) -> str:
     lines.append("## Agent Operation Log (God's Eye View)\n")
     lines.append(f"**Total duration**: {result.duration_s}s")
     lines.append(f"**Total events**: {len(result.events)}")
+    if result.prompt_version:
+        lines.append(f"**Prompt version**: {result.prompt_version}")
+    if result.model:
+        lines.append(f"**Model**: {result.model}")
 
     # ── Extract event data ──
     search_queries: list[str] = []

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getTrace, annotateGrader } from '../lib/api.ts'
+import { getTrace, annotateGrader, annotateHumanPass } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
 import GraderBreakdown from '../components/GraderBreakdown.tsx'
 import TraceTimeline from '../components/TraceTimeline.tsx'
@@ -53,8 +53,18 @@ export default function TracePage() {
               <span>grading: {trace.grading_duration_s.toFixed(1)}s</span>
             )}
           </div>
+          {(trace.prompt_version || trace.judge_prompt_version || trace.model) && (
+            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400 font-mono">
+              {trace.prompt_version && <span>prompt: {trace.prompt_version}</span>}
+              {trace.judge_prompt_version && <span>judge: {trace.judge_prompt_version}</span>}
+              {trace.model && <span>model: {trace.model}</span>}
+            </div>
+          )}
         </div>
-        <ScoreBadge score={trace.final_score} pass={trace.final_pass} size="lg" />
+        <div className="flex flex-col items-end gap-2">
+          <ScoreBadge score={trace.final_score} pass={trace.final_pass} size="lg" />
+          <HumanPassButton trace={trace} onUpdated={setTrace} />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -334,6 +344,64 @@ function LogEntry({ entry }: { entry: GradingLogEntry }) {
     </div>
   )
 }
+
+/* ── Human PASS/FAIL Button ── */
+function HumanPassButton({ trace, onUpdated }: { trace: Trace; onUpdated: (t: Trace) => void }) {
+  const [saving, setSaving] = useState(false)
+
+  const handleClick = async (passed: boolean) => {
+    setSaving(true)
+    try {
+      await annotateHumanPass(trace.id, passed)
+      onUpdated({ ...trace, human_pass: passed })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (trace.human_pass !== null && trace.human_pass !== undefined) {
+    const agrees = trace.human_pass === trace.final_pass
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+          trace.human_pass ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+        }`}>
+          Human: {trace.human_pass ? 'PASS' : 'FAIL'}
+        </span>
+        {!agrees && (
+          <span className="text-[10px] text-amber-600 font-medium">disagrees</span>
+        )}
+        <button
+          onClick={() => handleClick(!trace.human_pass)}
+          disabled={saving}
+          className="text-[10px] text-slate-400 hover:text-blue-600"
+        >
+          flip
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => handleClick(true)}
+        disabled={saving}
+        className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+      >
+        PASS
+      </button>
+      <button
+        onClick={() => handleClick(false)}
+        disabled={saving}
+        className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
+      >
+        FAIL
+      </button>
+    </div>
+  )
+}
+
 
 /* ── Human Annotation Panel ── */
 function HumanAnnotationPanel({ trace, onAnnotated }: { trace: Trace; onAnnotated: (t: Trace) => void }) {

@@ -86,6 +86,10 @@ class Trace(BaseModel):
     grading_duration_s: float = 0
     human_scores: dict = {}
     grading_log: list = []
+    prompt_version: str = ""
+    model: str = ""
+    judge_prompt_version: str = ""
+    human_pass: bool | None = None
     created_at: float = 0
 
 

@@ -25,6 +25,10 @@ class AnnotateGraderRequest(BaseModel):
     human_reasoning: str = ""
 
 
+class AnnotateHumanPassRequest(BaseModel):
+    passed: bool
+
+
 # ── Endpoints ───────────────────────────────────
 
 @router.get("/{trace_id}")
@@ -84,6 +88,17 @@ async def annotate_grader(trace_id: int, body: AnnotateGraderRequest):
         }
 
     return {"ok": True, "agreement": agreement}
+
+
+@router.post("/{trace_id}/annotate-pass")
+async def annotate_human_pass(trace_id: int, body: AnnotateHumanPassRequest):
+    """Set human PASS/FAIL verdict for a trace."""
+    trace = await queries.get_trace(trace_id)
+    if not trace:
+        return JSONResponse(status_code=404, content={"detail": "Trace not found."})
+
+    await queries.annotate_trace_human_pass(trace_id, body.passed)
+    return {"ok": True, "passed": body.passed}
 
 
 @router.get("/{trace_id}/logs")

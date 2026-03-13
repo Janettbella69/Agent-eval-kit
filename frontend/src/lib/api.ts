@@ -62,3 +62,7 @@ export const annotateGrader = (traceId: number, graderName: string, humanScore: 
   )
 export const getTraceLogs = (id: number) =>
   fetchJSON<{ trace_id: number; grading_log: GradingLogEntry[]; grading_duration_s: number; human_scores: Record<string, HumanScore> }>(`/traces/${id}/logs`)
+export const annotateHumanPass = (traceId: number, passed: boolean) =>
+  fetchJSON<{ ok: boolean; passed: boolean }>(`/traces/${traceId}/annotate-pass`, {
+    method: 'POST', body: JSON.stringify({ passed }),
+  })

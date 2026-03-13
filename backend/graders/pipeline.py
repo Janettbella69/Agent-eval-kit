@@ -212,6 +212,13 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         "duration_s": total_duration,
     })
 
+    # Include judge prompt version for traceability
+    try:
+        from config import JUDGE_PROMPT_VERSION
+        judge_pv = JUDGE_PROMPT_VERSION
+    except ImportError:
+        judge_pv = ""
+
     return {
         "l0": {"structure": l0, "constraints": l0c},
         "l1": {"score": l1_score, "breakdown": l1_breakdown},
@@ -228,4 +235,5 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         "grading_duration_s": total_duration,
         "grading_log": grading_log,
         "gate": {"results": gate_results, "passed": gate_passed},
+        "judge_prompt_version": judge_pv,
     }
