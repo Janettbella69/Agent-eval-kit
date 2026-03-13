@@ -1,9 +1,15 @@
-"""Eval agent — Claude Agent SDK powered L2 judge.
+"""Eval agent — Claude Agent SDK powered evaluation.
 
-Replaces the raw Anthropic API calls in l2_judge.py with an agent that can:
-1. Holistically analyze the guide across all 5 dimensions
-2. Verify source URLs with the verify_url tool
-3. Record structured PASS/FAIL verdicts via score_dimension tool
+Supports two execution modes (controlled by JUDGE_PRESET config):
+1. Preset mode (default): Uses preset="claude_code" for full Claude Code capabilities
+   — WebSearch, WebFetch, Bash, Read, Grep, Glob + eval tools
+   — Deep verification: spot-checks prices, cross-references sources, analyzes codebase
+2. Basic mode: Custom system prompt with only eval tools (score_grader + verify_url)
+   — Lightweight, faster, cheaper
+
+Both modes support:
+- L2 Judge (legacy): Holistic 5-dimension PASS/FAIL evaluation
+- Single Grader: Focused 0-100 numeric scoring for a specific dimension
 """
 
 import asyncio
@@ -15,11 +21,144 @@ from claude_agent_sdk import (
 )
 
 from agent.tools import create_eval_tools_server, init_scores, get_scores
-from config import GRADING_MODEL
+from config import (
+    GRADING_MODEL,
+    JUDGE_PRESET,
+    JUDGE_MAX_TURNS_PRESET,
+    JUDGE_MAX_TURNS_BASIC,
+)
 from graders.types import L2_DIMENSIONS
 
 
-# ── System prompt ──
+# ── Shared capabilities block (appended in preset mode) ──────────────
+
+JUDGE_CAPABILITIES = """
+## You Are a Deep-Investigation Judge
+
+You have FULL Claude Code capabilities — WebSearch, WebFetch, Bash, Read, Grep, Glob.
+You are not a passive text reviewer. You are an autonomous investigator with tools.
+
+### Your Information Advantage ("God's Eye View")
+You see things the end-user never sees:
+1. **Agent Operation Log** — every search query, URL fetched, error, timing breakdown
+2. **Source Code** — the agent's actual prompt, hooks, quality gate logic
+3. **Live Web Access** — verify claims against current reality
+4. **Bash/Code** — write analysis scripts for quantitative checks
+
+### Source Code Reference
+The product agent's codebase lives at `/home/ubuntu/aiazora/backend/agent/`:
+- `prompts.py` — what the agent was INSTRUCTED to do (output format, quality gate, rules)
+- `hooks.py` — how hooks guide research (entity tracking, dimension coverage, adaptive guidance)
+- `tools.py` — custom tool definitions (emit_product, emit_sources, emit_question)
+- `engine.py` — agent orchestration, MAX_TURNS, MCP server config
+
+Reading these files helps you judge: did the agent follow its own rules? Did it pass
+its quality gate? Did it use the right research strategy?
+
+## Autonomous Investigation Protocol
+
+### Phase 1: Analyze Operation Log
+The user message contains a structured "Agent Operation Log" section. Use it to:
+- Understand the agent's research strategy (what it searched, in what order)
+- Identify gaps (searches it should have done but didn't)
+- Spot failures (errors, failed URLs, low product count)
+- Assess efficiency (too many searches? too few? right balance?)
+
+### Phase 2: Initial Score
+Call `score_grader` with your first assessment based on the guide + operation log.
+
+### Phase 3: Deep Verification (use your tools)
+- **WebSearch** 2-3 product names to verify existence and price accuracy
+- **verify_url** on 2-3 critical source URLs
+- **WebFetch** the most important source to check content supports the guide's claims
+- **Read** `prompts.py` to check if the agent followed its quality gate
+- **Bash** for quantitative analysis (count products, measure section balance, etc.)
+
+### Phase 4: Self-Correction Loop
+After verification, check:
+- Did verification CONTRADICT my initial score? → call `score_grader` again
+- Is there a GAP between what the operation log shows (agent's effort) and the output?
+  e.g., agent searched extensively but guide is shallow → output quality issue
+  e.g., agent barely searched but guide is detailed → hallucination risk
+- Did I overlook error events that explain quality gaps?
+
+If your revised score differs from initial by >10 points, explain WHAT CHANGED.
+If initial holds up after verification, do NOT revise — one accurate score beats padding.
+
+### Budget
+- 5-8 tool calls per evaluation (searches + reads + fetches)
+- Focus on claims that are central to the guide's value
+- If something is easily verifiable and important, verify it
+"""
+
+
+# ── Tool lists ────────────────────────────────────────────────────────
+
+_BASIC_TOOLS_L2 = [
+    "mcp__eval-tools__score_dimension",
+    "mcp__eval-tools__verify_url",
+]
+
+_BASIC_TOOLS_GRADER = [
+    "mcp__eval-tools__score_grader",
+    "mcp__eval-tools__verify_url",
+]
+
+# Claude Code preset tools — the preset provides Read/Bash/Grep/Glob/WebSearch/WebFetch
+# automatically; we just need to also allow our MCP eval tools.
+_PRESET_EXTRA_TOOLS = [
+    "WebSearch",
+    "WebFetch",
+    "Bash",
+    "Read",
+    "Grep",
+    "Glob",
+]
+
+
+def _build_options(
+    prompt_text: str,
+    tools_server,
+    is_l2: bool = False,
+) -> ClaudeAgentOptions:
+    """Build ClaudeAgentOptions for either preset or basic mode.
+
+    In preset mode:
+      - system_prompt = {"type": "preset", "preset": "claude_code", "append": prompt_text + capabilities}
+      - allowed_tools = eval MCP tools + Claude Code built-in tools
+      - max_turns = JUDGE_MAX_TURNS_PRESET (default 20)
+
+    In basic mode:
+      - system_prompt = prompt_text (plain string)
+      - allowed_tools = only eval MCP tools
+      - max_turns = JUDGE_MAX_TURNS_BASIC (default 6)
+    """
+    base_tools = _BASIC_TOOLS_L2 if is_l2 else _BASIC_TOOLS_GRADER
+
+    if JUDGE_PRESET:
+        system_prompt = {
+            "type": "preset",
+            "preset": "claude_code",
+            "append": prompt_text + "\n" + JUDGE_CAPABILITIES,
+        }
+        allowed_tools = base_tools + _PRESET_EXTRA_TOOLS
+        max_turns = JUDGE_MAX_TURNS_PRESET if is_l2 else min(JUDGE_MAX_TURNS_PRESET, 15)
+    else:
+        system_prompt = prompt_text
+        allowed_tools = base_tools
+        max_turns = 10 if is_l2 else JUDGE_MAX_TURNS_BASIC
+
+    return ClaudeAgentOptions(
+        system_prompt=system_prompt,
+        model=GRADING_MODEL,
+        max_turns=max_turns,
+        permission_mode="bypassPermissions",
+        allowed_tools=allowed_tools,
+        mcp_servers={"eval-tools": tools_server},
+    )
+
+
+# ── L2 Judge (legacy PASS/FAIL mode) ─────────────────────────────────
 
 EVAL_AGENT_PROMPT = """You are an evaluation agent for a shopping research system.
 
@@ -35,32 +174,26 @@ Your task: evaluate a buyer's guide across 5 quality dimensions and record PASS/
 2. Use the `verify_url` tool to spot-check 2-3 key source URLs for evidence_quality.
    - Don't check every URL. Focus on the most important claims.
    - If URLs are broken, factor that into your evidence_quality verdict.
-3. Call `score_dimension` exactly once per dimension (5 calls total).
+3. Call `score_dimension` for each dimension (5 calls total).
 4. PASS = meets criteria adequately for a helpful shopping guide.
 5. FAIL = clearly deficient on this dimension.
 6. UNKNOWN = insufficient information to judge (e.g., empty guide).
 7. Base your judgment on the guide content AND the automated evidence provided.
 8. Be fair but rigorous. A guide doesn't need to be perfect to PASS.
-9. After scoring all 5 dimensions, output a brief overall assessment (2-3 sentences).
+9. After scoring all 5 dimensions, briefly reflect: do your verdicts feel consistent
+   with each other and with the evidence? If not, revise the affected dimension(s).
+10. Output a brief overall assessment (2-3 sentences).
 """
 
 
 def _build_dimensions_block() -> str:
-    """Format dimension definitions for the system prompt."""
     lines = []
     for i, dim in enumerate(L2_DIMENSIONS, 1):
         lines.append(f"{i}. **{dim.name}**: {dim.criteria}")
     return "\n".join(lines)
 
 
-def _build_eval_message(
-    query: str,
-    guide_text: str,
-    evidence_summary: str,
-    products_summary: str,
-    sources_summary: str,
-) -> str:
-    """Build the user message for the eval agent."""
+def _build_eval_message(query, guide_text, evidence_summary, products_summary, sources_summary) -> str:
     return f"""Evaluate this shopping research guide.
 
 ## User Query
@@ -84,7 +217,6 @@ Now evaluate the guide. Verify a few key URLs, then score all 5 dimensions using
 
 
 def _format_products(products: list) -> str:
-    """Summarize products for the eval message."""
     if not products:
         return "No products found."
     lines = []
@@ -99,7 +231,6 @@ def _format_products(products: list) -> str:
 
 
 def _format_sources(sources: list) -> str:
-    """Summarize sources for the eval message."""
     if not sources:
         return "No sources found."
     lines = []
@@ -123,30 +254,19 @@ async def run_eval_agent(
     products: list,
     sources: list,
 ) -> dict:
-    """Run the eval agent and return L2 scores.
+    """Run the L2 eval agent (legacy PASS/FAIL mode).
 
     Returns:
         {"dimensions": {"name": "PASS"|"FAIL"|"UNKNOWN"}, "l2_score": float | None}
     """
     init_scores()
 
-    system_prompt = EVAL_AGENT_PROMPT.format(
+    prompt_text = EVAL_AGENT_PROMPT.format(
         dimensions_block=_build_dimensions_block(),
     )
 
     tools_server = create_eval_tools_server()
-
-    options = ClaudeAgentOptions(
-        system_prompt=system_prompt,
-        model=GRADING_MODEL,
-        max_turns=10,
-        permission_mode="bypassPermissions",
-        allowed_tools=[
-            "mcp__eval-tools__score_dimension",
-            "mcp__eval-tools__verify_url",
-        ],
-        mcp_servers={"eval-tools": tools_server},
-    )
+    options = _build_options(prompt_text, tools_server, is_l2=True)
 
     message = _build_eval_message(
         query=query,
@@ -163,7 +283,6 @@ async def run_eval_agent(
                 if isinstance(msg, ResultMessage):
                     break
     except Exception:
-        # Fail-open: return empty scores on agent errors
         pass
 
     # Collect scores from tool calls
@@ -183,3 +302,49 @@ async def run_eval_agent(
     l2_score = round(passes / len(valid) * 100, 1) if valid else None
 
     return {"dimensions": dimensions, "l2_score": l2_score}
+
+
+# ── Single Grader (new 0-100 mode) ───────────────────────────────────
+
+async def run_eval_grader(
+    system_prompt: str,
+    user_message: str,
+    grader_name: str,
+) -> dict | None:
+    """Run a single LLM grader that returns a 0-100 score.
+
+    The agent calls score_grader(grader_name, score, reasoning) exactly once.
+
+    In preset mode, the grader's system_prompt becomes the "append" portion of the
+    Claude Code preset — giving the grader full capabilities to verify claims.
+
+    Returns:
+        {"score": float, "reasoning": str, "details": {}} or None on failure.
+    """
+    init_scores()
+
+    tools_server = create_eval_tools_server()
+    options = _build_options(system_prompt, tools_server, is_l2=False)
+
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(user_message)
+            async for msg in client.receive_response():
+                if isinstance(msg, ResultMessage):
+                    break
+    except Exception:
+        return None
+
+    raw_scores = get_scores()
+    grader_data = raw_scores.get(grader_name)
+
+    if not grader_data or not isinstance(grader_data, dict):
+        return None
+
+    return {
+        "score": grader_data.get("score", 0),
+        "reasoning": grader_data.get("reasoning", ""),
+        "details": {},
+        "revision_num": grader_data.get("revision_num", 1),
+        "revisions": grader_data.get("revisions", []),
+    }

@@ -2,6 +2,7 @@ export interface Dataset {
   id: number
   name: string
   description: string
+  suite_type: 'capability' | 'regression'
   case_count: number
   created_at: number
 }
@@ -13,6 +14,35 @@ export interface Case {
   query: string
   type: string
   constraints: Record<string, unknown>
+  golden_data: GoldenData
+  reference_output: Record<string, unknown> | null
+}
+
+export interface GoldenData {
+  scene_list?: SceneItem[]
+  product_list?: ProductItem[]
+  trap_rubric?: string
+  source?: string
+}
+
+export interface SceneItem {
+  uuid: string
+  scene: string
+  rubric: string
+}
+
+export interface ProductItem {
+  product_name: string
+  scene_annotation_list?: SceneAnnotation[]
+  [key: string]: unknown
+}
+
+export interface SceneAnnotation {
+  uuid: string
+  scene: string
+  rubric: string
+  reason: string
+  reference?: { urls: string[] }
 }
 
 export interface Experiment {
@@ -43,6 +73,13 @@ export interface ExperimentSummary {
   avg_score: number
   median_score: number
   avg_duration: number
+  pass_rate: number
+  pass_all_rate: number
+  consistency_rate: number
+  failure_funnel_dist: Record<string, number>
+  grader_averages: Record<string, number>
+  pass_at_k: Record<string, number>
+  pass_pow_k: Record<string, number>
 }
 
 export interface Trace {
@@ -66,7 +103,70 @@ export interface Trace {
   l2_scores: Record<string, unknown> | null
   final_score: number
   final_pass: boolean
+  composite_scores: Record<string, CompositeGraderScore>
+  failure_funnel: FunnelResult
+  error_types: string[]
+  grading_duration_s: number
+  human_scores: Record<string, HumanScore>
+  grading_log: GradingLogEntry[]
   created_at: number
+}
+
+export interface HumanScore {
+  score: number
+  reasoning: string
+}
+
+export interface GradingLogEntry {
+  step: string
+  category: 'code' | 'llm' | 'system'
+  score?: number | null
+  weight?: number
+  duration_s?: number
+  status?: string
+  error?: string
+  error_types?: string[]
+  revisions?: number
+  reasoning_preview?: string
+  // system entries
+  passed?: boolean
+  results?: Record<string, boolean>
+  is_pass?: boolean
+  n_graders?: number
+}
+
+export interface CompositeGraderScore {
+  score: number
+  weight: number
+  category: 'code' | 'llm'
+  details: Record<string, unknown>
+  error_types: string[]
+}
+
+export interface FunnelResult {
+  stage: string | null
+  reason: string
+  stages: Record<string, 'pass' | 'fail'>
+}
+
+export interface SaturationCase {
+  case_key: string
+  total_trials: number
+  passes: number
+  pass_rate: number
+  avg_score: number
+  n_experiments: number
+  saturated: boolean
+}
+
+export interface CaseHistoryEntry {
+  case_key: string
+  final_score: number
+  final_pass: boolean
+  trial_num: number
+  experiment_id: number
+  tag: string
+  exp_created: number
 }
 
 export interface WsMessage {
@@ -79,4 +179,7 @@ export interface WsMessage {
   duration_s?: number
   total?: number
   summary?: ExperimentSummary
+  error?: string
+  reason?: string
+  consecutive_errors?: number
 }

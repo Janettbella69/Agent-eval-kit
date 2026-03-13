@@ -1,17 +1,20 @@
-"""Experiment executor: runs cases, grades results, stores traces."""
+"""Experiment executor: two-phase collect → grade pipeline with circuit breaker.
+
+Phase 1 (Collect): Run cases through product backend, save raw traces
+Phase 2 (Grade): Run grading pipeline on collected traces, save scores
+Phase 3 (Aggregate): Compute experiment summary with pass@k metrics
+"""
 
 import asyncio
 import time
 
 from runner.collector import collect_sse, CollectedResult
-from graders.l0_structure import grade_structure
-from graders.l0_constraints import grade_constraints
-from graders.l1_metrics import compute_l1_score
-from graders.scoring import compute_final_score
+from graders.pipeline import grade_trace as grade_trace_pipeline
 from storage import queries
 from runner.progress import get_manager
 
 MAX_AUTO_CLARIFICATIONS = 2
+CIRCUIT_BREAKER_THRESHOLD = 3  # consecutive errors → auto-pause
 
 
 def _pick_clarification_answer(clarification: dict) -> str:
@@ -23,24 +26,22 @@ def _pick_clarification_answer(clarification: dict) -> str:
     return "give me general recommendations"
 
 
-async def run_single_case(
+async def collect_single_case(
     case: dict,
     trial_num: int = 1,
     auto_clarify: bool = True,
-) -> dict:
-    """Run a single eval case through collect → grade pipeline.
+) -> CollectedResult:
+    """Collect SSE events for a single case (Phase 1 only — no grading).
 
     Args:
-        case: {"key", "query", "type", "constraints"}
+        case: {"key", "query", "type", "constraints", "golden_data"}
         trial_num: Trial number (1-indexed).
         auto_clarify: Auto-answer clarification questions.
 
     Returns:
-        Dict with all trace fields ready for DB storage.
+        CollectedResult with raw SSE data.
     """
     query = case["query"]
-    case_type = case.get("type", "clear_en")
-    constraints = case.get("constraints", {})
     history: list[dict] = []
 
     result: CollectedResult | None = None
@@ -59,29 +60,17 @@ async def run_single_case(
 
         break
 
-    # Grade
-    l0 = grade_structure(result, case_type)
-    l0c = grade_constraints(result, constraints)
-    l1_score, l1_breakdown = compute_l1_score(result, case_type)
+    return result
 
-    # L2 judge (if enabled — imported lazily to avoid startup cost)
-    l2 = None
-    try:
-        from config import JUDGE_ENABLED
-        if JUDGE_ENABLED:
-            from graders.l2_judge import grade_l2
-            l2 = await grade_l2(result, case, {"structure": l0}, l0c, l1_breakdown)
-    except Exception:
-        pass
 
-    final_score, is_pass = compute_final_score(l0, l1_score, l2, case_type)
-
+def _result_to_trace_data(result: CollectedResult, case: dict, trial_num: int) -> dict:
+    """Convert CollectedResult to trace data dict for DB storage."""
     return {
         "case_key": case["key"],
         "trial_num": trial_num,
-        "query": query,
-        "case_type": case_type,
-        "status": "done",
+        "query": case["query"],
+        "case_type": case.get("type", "clear_en"),
+        "status": "collected",
         "duration_s": result.duration_s,
         "guide_text": result.guide_text,
         "products": result.products,
@@ -90,12 +79,27 @@ async def run_single_case(
         "hook_metrics": result.hook_metrics,
         "error_events": result.error_events,
         "clarification": result.clarification,
-        "l0_scores": {"structure": l0, "constraints": l0c},
-        "l1_scores": l1_breakdown,
-        "l2_scores": l2,
-        "final_score": final_score,
-        "final_pass": int(is_pass),
     }
+
+
+async def _grade_single_trace(trace: queries.Trace, case: dict) -> dict:
+    """Run grading pipeline on a collected trace.
+
+    Reconstructs a CollectedResult from trace data and runs the full pipeline.
+    """
+    result = CollectedResult(
+        guide_text=trace.guide_text,
+        products=trace.products,
+        sources=trace.sources,
+        events=trace.events,
+        hook_metrics=trace.hook_metrics,
+        error_events=trace.error_events,
+        clarification=trace.clarification,
+        duration_s=trace.duration_s,
+    )
+
+    grades = await grade_trace_pipeline(result, case)
+    return grades
 
 
 # In-flight experiment cancellation tokens
@@ -112,7 +116,7 @@ async def run_experiment(
     concurrency: int = 1,
     trials: int = 1,
 ):
-    """Run all cases for an experiment with concurrency control.
+    """Run all cases for an experiment: Phase 1 (collect) → Phase 2 (grade) → Phase 3 (aggregate).
 
     Updates DB traces and broadcasts progress via WebSocket.
     """
@@ -121,9 +125,17 @@ async def run_experiment(
     sem = asyncio.Semaphore(concurrency)
 
     await queries.update_experiment_status(experiment_id, "running")
-    manager.broadcast(experiment_id, {"type": "experiment_start", "total": len(cases) * trials})
+    total = len(cases) * trials
+    manager.broadcast(experiment_id, {"type": "experiment_start", "total": total})
 
-    async def run_one(case: dict, trial_num: int):
+    # ── Phase 1: Collect ──
+    collected_trace_ids: list[int] = []
+    consecutive_errors = 0
+    case_map: dict[str, dict] = {c["key"]: c for c in cases}
+
+    async def collect_one(case: dict, trial_num: int):
+        nonlocal consecutive_errors
+
         if _cancel_flags.get(experiment_id):
             return
 
@@ -139,37 +151,113 @@ async def run_experiment(
 
         try:
             async with sem:
-                trace_data = await run_single_case(case, trial_num)
+                result = await collect_single_case(case, trial_num)
+
+            trace_data = _result_to_trace_data(result, case, trial_num)
+            await queries.update_trace(trace_id, **trace_data)
+            collected_trace_ids.append(trace_id)
+            consecutive_errors = 0  # Reset on success
+
+            manager.broadcast(experiment_id, {
+                "type": "case_collected",
+                "case_key": case["key"],
+                "trial_num": trial_num,
+                "trace_id": trace_id,
+                "duration_s": result.duration_s,
+            })
+
         except Exception as e:
-            trace_data = {
+            await queries.update_trace(trace_id, **{
                 "status": "error",
                 "error_events": [{"type": "error", "message": str(e)[:500]}],
                 "final_score": 0,
                 "final_pass": 0,
-            }
+            })
+            consecutive_errors += 1
 
-        await queries.update_trace(trace_id, **trace_data)
-        manager.broadcast(experiment_id, {
-            "type": "case_done",
-            "case_key": case["key"],
-            "trial_num": trial_num,
-            "trace_id": trace_id,
-            "score": trace_data.get("final_score", 0),
-            "passed": bool(trace_data.get("final_pass")),
-            "duration_s": trace_data.get("duration_s", 0),
-        })
+            manager.broadcast(experiment_id, {
+                "type": "case_error",
+                "case_key": case["key"],
+                "trial_num": trial_num,
+                "trace_id": trace_id,
+                "error": str(e)[:200],
+            })
 
-    tasks = []
+            # Circuit breaker
+            if consecutive_errors >= CIRCUIT_BREAKER_THRESHOLD:
+                reason = f"Circuit breaker: {consecutive_errors} consecutive errors"
+                await queries.update_experiment_status(experiment_id, "paused")
+                manager.broadcast(experiment_id, {
+                    "type": "circuit_break",
+                    "reason": reason,
+                    "consecutive_errors": consecutive_errors,
+                })
+                _cancel_flags[experiment_id] = True
+
+    collect_tasks = []
     for case in cases:
         for trial in range(1, trials + 1):
-            tasks.append(run_one(case, trial))
+            collect_tasks.append(collect_one(case, trial))
 
-    await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.gather(*collect_tasks, return_exceptions=True)
 
-    # Compute and save summary
+    # Check if circuit breaker was triggered
+    if _cancel_flags.get(experiment_id):
+        # Still grade whatever was collected
+        pass
+
+    # ── Phase 2: Grade ──
+    if collected_trace_ids:
+        manager.broadcast(experiment_id, {
+            "type": "grading_start",
+            "total": len(collected_trace_ids),
+        })
+
+        for trace_id in collected_trace_ids:
+            trace = await queries.get_trace(trace_id)
+            if not trace or trace.status == "error":
+                continue
+
+            case = case_map.get(trace.case_key, {"key": trace.case_key, "query": trace.query,
+                                                  "type": trace.case_type, "constraints": {}, "golden_data": {}})
+
+            try:
+                grades = await _grade_single_trace(trace, case)
+                await queries.update_trace(trace_id, **{
+                    "status": "done",
+                    "l0_scores": grades.get("l0", {}),
+                    "l1_scores": grades.get("l1", {}).get("breakdown", {}),
+                    "l2_scores": grades.get("l2"),
+                    "final_score": grades.get("final_score", 0),
+                    "final_pass": int(grades.get("final_pass", False)),
+                    "composite_scores": grades.get("composite_scores", {}),
+                    "failure_funnel": grades.get("failure_funnel", {}),
+                    "error_types": grades.get("error_types", []),
+                    "grading_duration_s": grades.get("grading_duration_s", 0),
+                    "grading_log": grades.get("grading_log", []),
+                })
+
+                manager.broadcast(experiment_id, {
+                    "type": "case_graded",
+                    "case_key": trace.case_key,
+                    "trial_num": trace.trial_num,
+                    "trace_id": trace_id,
+                    "score": grades.get("final_score", 0),
+                    "passed": bool(grades.get("final_pass")),
+                })
+            except Exception:
+                # Grading error — mark trace with what we have
+                await queries.update_trace(trace_id, status="done", final_score=0, final_pass=0)
+
+    # ── Phase 3: Aggregate ──
     summary = await queries.compute_experiment_summary(experiment_id)
+
+    status = "complete"
+    if _cancel_flags.get(experiment_id) and consecutive_errors >= CIRCUIT_BREAKER_THRESHOLD:
+        status = "paused"
+
     await queries.update_experiment_status(
-        experiment_id, "complete",
+        experiment_id, status,
         summary=summary.model_dump(),
         finished_at=time.time(),
     )
@@ -178,3 +266,54 @@ async def run_experiment(
         "summary": summary.model_dump(),
     })
     _cancel_flags.pop(experiment_id, None)
+
+
+async def regrade_experiment(experiment_id: int) -> int:
+    """Re-grade all collected/graded traces in an experiment.
+
+    Returns the number of traces re-graded.
+    """
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return 0
+
+    # Get all cases for golden_data
+    all_cases = await queries.get_cases(experiment.dataset_id)
+    case_map = {c.key: {"key": c.key, "query": c.query, "type": c.type,
+                        "constraints": c.constraints, "golden_data": c.golden_data}
+                for c in all_cases}
+
+    traces = await queries.get_collected_traces(experiment_id)
+    count = 0
+
+    for trace in traces:
+        case = case_map.get(trace.case_key, {"key": trace.case_key, "query": trace.query,
+                                              "type": trace.case_type, "constraints": {}, "golden_data": {}})
+        try:
+            grades = await _grade_single_trace(trace, case)
+            await queries.update_trace(trace.id, **{
+                "status": "done",
+                "l0_scores": grades.get("l0", {}),
+                "l1_scores": grades.get("l1", {}).get("breakdown", {}),
+                "l2_scores": grades.get("l2"),
+                "final_score": grades.get("final_score", 0),
+                "final_pass": int(grades.get("final_pass", False)),
+                "composite_scores": grades.get("composite_scores", {}),
+                "failure_funnel": grades.get("failure_funnel", {}),
+                "error_types": grades.get("error_types", []),
+                "grading_duration_s": grades.get("grading_duration_s", 0),
+                "grading_log": grades.get("grading_log", []),
+            })
+            count += 1
+        except Exception:
+            continue
+
+    # Recompute summary
+    summary = await queries.compute_experiment_summary(experiment_id)
+    await queries.update_experiment_status(
+        experiment_id, "complete",
+        summary=summary.model_dump(),
+        finished_at=time.time(),
+    )
+
+    return count

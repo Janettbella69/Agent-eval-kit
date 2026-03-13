@@ -21,6 +21,7 @@ _TABLES = [
         query TEXT NOT NULL,
         type TEXT NOT NULL DEFAULT 'clear_en',
         constraints TEXT DEFAULT '{}',
+        golden_data TEXT DEFAULT '{}',
         UNIQUE(dataset_id, key)
     )""",
     """CREATE TABLE IF NOT EXISTS experiments (
@@ -54,10 +55,33 @@ _TABLES = [
         l2_scores TEXT,
         final_score REAL DEFAULT 0,
         final_pass INTEGER DEFAULT 0,
+        composite_scores TEXT DEFAULT '{}',
+        failure_funnel TEXT DEFAULT '{}',
+        error_types TEXT DEFAULT '[]',
+        grading_duration_s REAL DEFAULT 0,
         created_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
     )""",
     "CREATE INDEX IF NOT EXISTS idx_traces_experiment ON traces(experiment_id)",
     "CREATE INDEX IF NOT EXISTS idx_cases_dataset ON cases(dataset_id)",
+]
+
+# Migrations for existing databases (run after table creation)
+_MIGRATIONS = [
+    # Add golden_data to cases
+    "ALTER TABLE cases ADD COLUMN golden_data TEXT DEFAULT '{}'",
+    # Add new grading columns to traces
+    "ALTER TABLE traces ADD COLUMN composite_scores TEXT DEFAULT '{}'",
+    "ALTER TABLE traces ADD COLUMN failure_funnel TEXT DEFAULT '{}'",
+    "ALTER TABLE traces ADD COLUMN error_types TEXT DEFAULT '[]'",
+    "ALTER TABLE traces ADD COLUMN grading_duration_s REAL DEFAULT 0",
+    # Phase 2: suite_type on datasets (capability / regression)
+    "ALTER TABLE datasets ADD COLUMN suite_type TEXT DEFAULT 'capability'",
+    # Phase 2: reference_output on cases (known-good output for grader calibration)
+    "ALTER TABLE cases ADD COLUMN reference_output TEXT",
+    # Phase 2: human_scores on traces (human annotation for LLM-judge calibration)
+    "ALTER TABLE traces ADD COLUMN human_scores TEXT DEFAULT '{}'",
+    # Phase 2: grading_log on traces (per-grader execution log)
+    "ALTER TABLE traces ADD COLUMN grading_log TEXT DEFAULT '[]'",
 ]
 
 
@@ -71,6 +95,12 @@ async def init_db() -> None:
     await _db.execute("PRAGMA foreign_keys=ON")
     for sql in _TABLES:
         await _db.execute(sql)
+    # Run migrations (safe: ALTER TABLE ADD COLUMN is no-op if column exists)
+    for sql in _MIGRATIONS:
+        try:
+            await _db.execute(sql)
+        except Exception:
+            pass  # Column already exists
     await _db.commit()
 
 

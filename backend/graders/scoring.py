@@ -1,6 +1,40 @@
-"""Final score computation combining L0, L1, and L2 grades."""
+"""Score computation: Pass/Fail gate + composite scoring.
 
+Two-layer scoring:
+  Layer 1: Pass/Fail Gate (deterministic, binary)
+  Layer 2: Composite Score (weighted 0-100)
+"""
+
+from runner.collector import CollectedResult
+from graders.types import (
+    GATE_CHECKS_POSITIVE, GATE_CHECKS_TRAP,
+    NEGATIVE_TYPES, TRAP_TYPES,
+)
 from config import PASS_THRESHOLD
+
+
+def compute_pass_fail_gate(
+    result: CollectedResult,
+    case_type: str,
+) -> tuple[dict[str, bool], bool]:
+    """Run pass/fail gate checks.
+
+    Returns (gate_results: {check_name: bool}, all_passed: bool).
+    """
+    if case_type in NEGATIVE_TYPES or case_type in TRAP_TYPES:
+        checks = GATE_CHECKS_TRAP
+    else:
+        checks = GATE_CHECKS_POSITIVE
+
+    gate_results = {}
+    for name, check_fn in checks.items():
+        try:
+            gate_results[name] = check_fn(result)
+        except Exception:
+            gate_results[name] = False
+
+    all_passed = all(gate_results.values())
+    return gate_results, all_passed
 
 
 def compute_final_score(
@@ -9,7 +43,10 @@ def compute_final_score(
     l2: dict | None,
     case_type: str,
 ) -> tuple[float, bool]:
-    """Combine grader results into a final score.
+    """Legacy score computation combining L0, L1, and L2 grades.
+
+    Kept for backward compatibility with existing traces.
+    New traces use composite scoring via pipeline.py.
 
     Weights:
         L2 available:   L0(10%) + L1(40%) + L2(50%)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { listDatasets, getDataset, importDataset, createExperiment, runExperiment } from '../lib/api.ts'
 import type { Dataset, Case } from '../types.ts'
 
@@ -82,7 +82,25 @@ export default function DatasetsPage() {
                 : 'border-slate-200 bg-white hover:border-slate-300'
             }`}
           >
-            <div className="font-semibold text-slate-900">{d.name}</div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-900">{d.name}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  d.suite_type === 'regression'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-blue-50 text-blue-700'
+                }`}>
+                  {d.suite_type || 'capability'}
+                </span>
+              </div>
+              <Link
+                to={`/datasets/${d.id}`}
+                onClick={e => e.stopPropagation()}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Details
+              </Link>
+            </div>
             <div className="text-xs text-slate-500 mt-1">{d.case_count} cases</div>
             {d.description && <div className="text-xs text-slate-400 mt-1">{d.description}</div>}
           </button>

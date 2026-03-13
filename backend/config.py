@@ -17,14 +17,22 @@ EVAL_API_KEY = os.getenv("EVAL_API_KEY", "")
 # Kept here for reference; Agent SDK picks up ANTHROPIC_API_KEY from os.environ.
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# L2 grading model
-GRADING_MODEL = os.getenv("GRADING_MODEL", "claude-haiku-4-5-20251001")
+# L2 grading model (should be stronger than the product orchestrator model)
+GRADING_MODEL = os.getenv("GRADING_MODEL", "openai/gpt-5.4")
 
 # Scoring thresholds
 PASS_THRESHOLD = int(os.getenv("PASS_THRESHOLD", "70"))
 
 # L2 judge toggle
 JUDGE_ENABLED = os.getenv("JUDGE_ENABLED", "").lower() in ("1", "true", "yes")
+
+# Judge preset mode — use Claude Code preset for full autonomy (WebSearch, Bash, Read, etc.)
+# When False, falls back to lightweight mode (only eval tools + verify_url)
+JUDGE_PRESET = os.getenv("JUDGE_PRESET", "true").lower() in ("1", "true", "yes")
+
+# Judge max turns — preset mode needs more turns for verification workflows
+JUDGE_MAX_TURNS_PRESET = int(os.getenv("JUDGE_MAX_TURNS_PRESET", "20"))
+JUDGE_MAX_TURNS_BASIC = int(os.getenv("JUDGE_MAX_TURNS_BASIC", "6"))
 
 # Database
 DB_PATH = Path(os.getenv("DB_PATH", str(Path(__file__).parent / "eval.db")))

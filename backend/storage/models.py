@@ -8,11 +8,14 @@ class CaseIn(BaseModel):
     query: str
     type: str = "clear_en"
     constraints: dict = {}
+    golden_data: dict = {}
+    reference_output: dict | None = None
 
 
 class DatasetIn(BaseModel):
     name: str
     description: str = ""
+    suite_type: str = "capability"  # capability | regression
     cases: list[CaseIn] = []
 
 
@@ -20,6 +23,7 @@ class Dataset(BaseModel):
     id: int
     name: str
     description: str = ""
+    suite_type: str = "capability"
     case_count: int = 0
     created_at: float = 0
 
@@ -31,6 +35,8 @@ class Case(BaseModel):
     query: str
     type: str
     constraints: dict = {}
+    golden_data: dict = {}
+    reference_output: dict | None = None
 
 
 class ExperimentIn(BaseModel):
@@ -74,6 +80,12 @@ class Trace(BaseModel):
     l2_scores: dict | None = None
     final_score: float = 0
     final_pass: bool = False
+    composite_scores: dict = {}
+    failure_funnel: dict = {}
+    error_types: list[str] = []
+    grading_duration_s: float = 0
+    human_scores: dict = {}
+    grading_log: list = []
     created_at: float = 0
 
 
@@ -86,3 +98,10 @@ class ExperimentSummary(BaseModel):
     avg_score: float = 0
     median_score: float = 0
     avg_duration: float = 0
+    pass_rate: float = 0          # pass@1
+    pass_all_rate: float = 0      # pass^k (all trials pass)
+    consistency_rate: float = 0   # consistency@k (score std dev)
+    failure_funnel_dist: dict = {}  # {understand: 3, search: 5, ...}
+    grader_averages: dict = {}      # {rubric_coverage: 72.3, ...}
+    pass_at_k: dict = {}            # {"pass@1": 0.75, "pass@3": 0.92, ...}
+    pass_pow_k: dict = {}           # {"pass^1": 0.75, "pass^3": 0.42, ...}

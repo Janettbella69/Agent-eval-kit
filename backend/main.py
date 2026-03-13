@@ -11,6 +11,7 @@ from storage.database import init_db
 from api.datasets import router as datasets_router
 from api.experiments import router as experiments_router
 from api.traces import router as traces_router
+from api.agent import router as agent_router
 from runner.progress import get_manager
 
 
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(datasets_router)
 app.include_router(experiments_router)
 app.include_router(traces_router)
+app.include_router(agent_router)
 
 
 @app.get("/api/health")

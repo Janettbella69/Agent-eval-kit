@@ -16,6 +16,7 @@ export default function CaseTable({ traces, sortKey, onSort }: CaseTableProps) {
     { key: 'final_score', label: 'Score' },
     { key: 'duration_s', label: 'Duration' },
     { key: 'status', label: 'Status' },
+    { key: 'error_types', label: 'Issues' },
   ]
 
   return (
@@ -37,42 +38,66 @@ export default function CaseTable({ traces, sortKey, onSort }: CaseTableProps) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {traces.map(t => (
-            <tr key={t.id} className="hover:bg-slate-25 transition-colors">
-              <td className="px-4 py-2.5">
-                <Link to={`/traces/${t.id}`} className="text-blue-600 hover:underline font-medium">
-                  {t.case_key}
-                </Link>
-                <div className="text-xs text-slate-400 truncate max-w-xs">{t.query}</div>
-              </td>
-              <td className="px-4 py-2.5 text-slate-600">#{t.trial_num}</td>
-              <td className="px-4 py-2.5">
-                <span className="px-1.5 py-0.5 rounded text-xs bg-slate-100 text-slate-600">
-                  {t.case_type}
-                </span>
-              </td>
-              <td className="px-4 py-2.5">
-                {t.status === 'done' ? (
-                  <ScoreBadge score={t.final_score} pass={t.final_pass} size="sm" />
-                ) : (
-                  <span className="text-slate-400 text-xs">-</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5 text-slate-600 tabular-nums">
-                {t.duration_s > 0 ? `${t.duration_s.toFixed(1)}s` : '-'}
-              </td>
-              <td className="px-4 py-2.5">
-                <span className={`text-xs font-medium ${
-                  t.status === 'done' ? 'text-emerald-600'
-                    : t.status === 'running' ? 'text-blue-600'
-                    : t.status === 'error' ? 'text-red-600'
-                    : 'text-slate-400'
-                }`}>
-                  {t.status}
-                </span>
-              </td>
-            </tr>
-          ))}
+          {traces.map(t => {
+            const funnelStage = t.failure_funnel?.stage
+            const errorCount = t.error_types?.length || 0
+
+            return (
+              <tr key={t.id} className="hover:bg-slate-25 transition-colors">
+                <td className="px-4 py-2.5">
+                  <Link to={`/traces/${t.id}`} className="text-blue-600 hover:underline font-medium">
+                    {t.case_key}
+                  </Link>
+                  <div className="text-xs text-slate-400 truncate max-w-xs">{t.query}</div>
+                </td>
+                <td className="px-4 py-2.5 text-slate-600">#{t.trial_num}</td>
+                <td className="px-4 py-2.5">
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    t.case_type === 'shoppingcomp' ? 'bg-blue-50 text-blue-700'
+                      : t.case_type === 'trap' ? 'bg-amber-50 text-amber-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {t.case_type}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  {t.status === 'done' || t.status === 'graded' ? (
+                    <ScoreBadge score={t.final_score} pass={t.final_pass} size="sm" />
+                  ) : (
+                    <span className="text-slate-400 text-xs">-</span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-slate-600 tabular-nums">
+                  {t.duration_s > 0 ? `${t.duration_s.toFixed(1)}s` : '-'}
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`text-xs font-medium ${
+                    t.status === 'done' ? 'text-emerald-600'
+                      : t.status === 'running' ? 'text-blue-600'
+                      : t.status === 'collected' ? 'text-sky-600'
+                      : t.status === 'error' ? 'text-red-600'
+                      : 'text-slate-400'
+                  }`}>
+                    {t.status}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    {funnelStage && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600">
+                        {funnelStage.replace('_', ' ')}
+                      </span>
+                    )}
+                    {errorCount > 0 && !funnelStage && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">
+                        {errorCount} issue{errorCount > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

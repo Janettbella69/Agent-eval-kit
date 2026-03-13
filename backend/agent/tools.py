@@ -4,14 +4,13 @@ Tools are registered via @tool decorator and served as an in-process MCP server.
 The eval agent calls these tools during its analysis of a shopping guide.
 """
 
-import json
 from contextvars import ContextVar
 from typing import Any
 
 import httpx
 from claude_agent_sdk import tool, create_sdk_mcp_server
 
-# ── Shared state for collecting dimension scores ──
+# ── Shared state for collecting scores ──
 _scores_var: ContextVar[dict | None] = ContextVar("eval_scores", default=None)
 
 
@@ -21,12 +20,68 @@ def init_scores():
 
 
 def get_scores() -> dict:
-    """Retrieve collected dimension scores."""
+    """Retrieve collected scores."""
     return _scores_var.get() or {}
 
 
 # ── Tools ──
 
+@tool(
+    "score_grader",
+    "Record your numeric score (0-100) for this evaluation. "
+    "You can call this multiple times — if self-reflection reveals issues, "
+    "call again with your revised score. The LAST call is your final answer. "
+    "Score 0-100 where 0=completely fails and 100=perfectly meets all criteria.",
+    {
+        "grader_name": str,
+        "score": float,
+        "reasoning": str,
+    },
+)
+async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
+    scores = _scores_var.get()
+    if scores is None:
+        scores = {}
+        _scores_var.set(scores)
+
+    grader_name = args.get("grader_name", "").strip()
+    score = args.get("score", 0)
+    reasoning = args.get("reasoning", "")
+
+    # Clamp score to 0-100
+    try:
+        score = max(0, min(100, float(score)))
+    except (TypeError, ValueError):
+        score = 0
+
+    # Track revision history — last call wins
+    existing = scores.get(grader_name)
+    revision_num = 1
+    revisions: list[dict] = []
+    if existing and isinstance(existing, dict):
+        revision_num = existing.get("revision_num", 1) + 1
+        revisions = list(existing.get("revisions", []))
+        revisions.append({
+            "score": existing.get("score", 0),
+            "reasoning": existing.get("reasoning", ""),
+        })
+
+    scores[grader_name] = {
+        "score": score,
+        "reasoning": reasoning,
+        "revision_num": revision_num,
+        "revisions": revisions,
+    }
+
+    response: dict[str, Any] = {"status": "recorded", "grader_name": grader_name, "score": score}
+    if revision_num > 1:
+        response["revised"] = True
+        response["revision_num"] = revision_num
+        response["previous_score"] = revisions[-1]["score"]
+    return response
+
+
+# Legacy tool — kept for backward compatibility with existing L2 judge
 @tool(
     "score_dimension",
     "Record your PASS/FAIL verdict for a quality dimension. "
@@ -96,4 +151,4 @@ async def verify_url(args: dict[str, Any]) -> dict[str, Any]:
 
 def create_eval_tools_server():
     """Create an in-process MCP server with eval tools."""
-    return create_sdk_mcp_server([score_dimension, verify_url])
+    return create_sdk_mcp_server([score_grader, score_dimension, verify_url])

@@ -3,10 +3,12 @@
 
 Usage:
     python eval/cli.py import --dataset legacy_v1
-    python eval/cli.py run --dataset legacy_v1 [--cases en_clear,niche] [--tag v1.0] [--trials 1] [--concurrency 1]
+    python eval/cli.py import-shoppingcomp --file datasets/ShoppingComp/X.jsonl --name "Name"
+    python eval/cli.py run --dataset "Dataset Name" [--cases key1,key2] [--tag v1.0] [--trials 1] [--concurrency 1]
     python eval/cli.py list
     python eval/cli.py summary --experiment-id 1
     python eval/cli.py regression --latest [--threshold 5]
+    python eval/cli.py regrade --experiment-id 1
 """
 
 import argparse
@@ -55,6 +57,29 @@ async def cmd_import(args):
     return 0
 
 
+async def cmd_import_shoppingcomp(args):
+    from loaders.shoppingcomp import import_shoppingcomp
+
+    file_path = Path(args.file)
+    if not file_path.is_absolute():
+        file_path = Path(__file__).parent.parent / file_path
+
+    print(f"Importing ShoppingComp from: {file_path}")
+
+    result = import_shoppingcomp(file_path, args.name, args.description or "")
+    # Handle both sync and async
+    if asyncio.iscoroutine(result):
+        result = await result
+
+    print(f"Dataset: '{args.name}' (id={result.dataset_id})")
+    print(f"  Total lines:  {result.total}")
+    print(f"  Imported:     {result.imported}")
+    print(f"  Skipped:      {result.skipped}")
+    for t, c in result.types.items():
+        print(f"  Type '{t}':  {c}")
+    return 0
+
+
 async def cmd_run(args):
     from storage.database import init_db
     from storage import queries
@@ -85,7 +110,7 @@ async def cmd_run(args):
     experiment_id = await queries.create_experiment(dataset.id, args.tag or "", config)
 
     cases = [{"key": c.key, "query": c.query, "type": c.type,
-              "constraints": c.constraints} for c in all_cases]
+              "constraints": c.constraints, "golden_data": c.golden_data} for c in all_cases]
 
     print(f"Experiment #{experiment_id}: {len(cases)} cases × {args.trials} trials")
     print(f"  concurrency={args.concurrency}, tag='{args.tag or ''}'")
@@ -156,10 +181,22 @@ async def cmd_summary(args):
     print(f"  Status:     {experiment.status}")
     print(f"  Avg Score:  {summary.avg_score}")
     print(f"  Median:     {summary.median_score}")
-    print(f"  Pass Rate:  {summary.passed}/{summary.total_cases}")
+    print(f"  Pass Rate:  {summary.passed}/{summary.total_cases} ({summary.pass_rate:.1%})")
+    print(f"  Pass All:   {summary.pass_all_rate:.1%}")
+    print(f"  Consistency: {summary.consistency_rate:.1f} (lower = more consistent)")
     print(f"  Avg Duration: {summary.avg_duration}s")
-    print()
 
+    if summary.failure_funnel_dist:
+        print(f"\n  Failure Funnel:")
+        for stage, count in summary.failure_funnel_dist.items():
+            print(f"    {stage}: {count}")
+
+    if summary.grader_averages:
+        print(f"\n  Grader Averages:")
+        for grader, avg in sorted(summary.grader_averages.items()):
+            print(f"    {grader:25s}: {avg:.1f}")
+
+    print()
     for t in traces:
         status = "✓" if t.final_pass else "✗"
         print(f"  {status} {t.case_key:20s}  score={t.final_score:5.1f}  {t.duration_s:6.1f}s  [{t.case_type}]")
@@ -199,13 +236,42 @@ async def cmd_regression(args):
         return 0
 
 
+async def cmd_regrade(args):
+    from storage.database import init_db
+    from storage import queries
+    from runner.executor import regrade_experiment
+
+    await init_db()
+    experiment = await queries.get_experiment(args.experiment_id)
+    if not experiment:
+        print(f"Error: Experiment #{args.experiment_id} not found.")
+        return 1
+
+    print(f"Re-grading Experiment #{experiment.id}...")
+    t0 = time.time()
+    count = await regrade_experiment(args.experiment_id)
+    elapsed = time.time() - t0
+
+    summary = await queries.compute_experiment_summary(args.experiment_id)
+    print(f"  Re-graded {count} traces in {elapsed:.1f}s")
+    print(f"  Avg Score: {summary.avg_score}")
+    print(f"  Pass Rate: {summary.passed}/{summary.total_cases}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="AIAzora Eval Platform CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    # import
+    # import (legacy JSON)
     p_import = subparsers.add_parser("import", help="Import dataset from JSON file")
     p_import.add_argument("--dataset", required=True, help="Dataset name (e.g., legacy_v1)")
+
+    # import-shoppingcomp (JSONL)
+    p_sc = subparsers.add_parser("import-shoppingcomp", help="Import ShoppingComp JSONL dataset")
+    p_sc.add_argument("--file", required=True, help="Path to JSONL file")
+    p_sc.add_argument("--name", required=True, help="Dataset name in DB")
+    p_sc.add_argument("--description", default="", help="Optional description")
 
     # run
     p_run = subparsers.add_parser("run", help="Run experiment")
@@ -227,6 +293,10 @@ def main():
     p_regression.add_argument("--latest", action="store_true", help="Compare latest two experiments")
     p_regression.add_argument("--threshold", type=float, default=5.0, help="Regression threshold")
 
+    # regrade
+    p_regrade = subparsers.add_parser("regrade", help="Re-grade all traces in an experiment")
+    p_regrade.add_argument("--experiment-id", type=int, required=True)
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -238,6 +308,8 @@ def main():
         "list": cmd_list,
         "summary": cmd_summary,
         "regression": cmd_regression,
+        "import-shoppingcomp": cmd_import_shoppingcomp,
+        "regrade": cmd_regrade,
     }
 
     return asyncio.run(cmd_map[args.command](args))

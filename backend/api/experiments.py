@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from storage import queries
 from storage.models import ExperimentIn
-from runner.executor import run_experiment, request_stop
+from runner.executor import run_experiment, request_stop, regrade_experiment
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
@@ -58,14 +58,14 @@ async def run_experiment_endpoint(experiment_id: int):
     if experiment.status == "running":
         return JSONResponse(status_code=409, content={"detail": "Experiment already running."})
 
-    # Load cases
+    # Load cases (with golden_data)
     all_cases = await queries.get_cases(experiment.dataset_id)
     case_filter = experiment.config.get("cases")
     if case_filter:
         all_cases = [c for c in all_cases if c.key in case_filter]
 
     cases = [{"key": c.key, "query": c.query, "type": c.type,
-              "constraints": c.constraints} for c in all_cases]
+              "constraints": c.constraints, "golden_data": c.golden_data} for c in all_cases]
 
     trials = experiment.config.get("trials", 1)
     concurrency = experiment.config.get("concurrency", 1)
@@ -87,3 +87,25 @@ async def stop_experiment(experiment_id: int):
 
     request_stop(experiment_id)
     return {"status": "stop_requested"}
+
+
+@router.post("/{experiment_id}/regrade")
+async def regrade_experiment_endpoint(experiment_id: int):
+    """Re-grade all collected traces with current grading pipeline."""
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return JSONResponse(status_code=404, content={"detail": "Experiment not found."})
+
+    count = await regrade_experiment(experiment_id)
+    return {"status": "regraded", "traces_regraded": count}
+
+
+@router.get("/{experiment_id}/summary")
+async def get_experiment_summary(experiment_id: int):
+    """Get aggregated experiment summary with pass@k metrics."""
+    experiment = await queries.get_experiment(experiment_id)
+    if not experiment:
+        return JSONResponse(status_code=404, content={"detail": "Experiment not found."})
+
+    summary = await queries.compute_experiment_summary(experiment_id)
+    return summary.model_dump()
