@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { listExperiments, getLangfuseStatus, importProductionTraces } from '../lib/api.ts'
+import { listExperiments } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
-import type { Experiment, LangfuseStatus, ProductionImportResult } from '../types.ts'
+import type { Experiment } from '../types.ts'
 
 function StatCard({
   label,
@@ -71,54 +71,98 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+// ── Sort types ──
+type SortKey = 'id' | 'tag' | 'dataset' | 'model' | 'status' | 'score' | 'pass' | 'duration' | 'date'
+type SortDir = 'asc' | 'desc'
+
+function SortableHeader({
+  label,
+  sortKey,
+  currentKey,
+  currentDir,
+  onSort,
+}: {
+  label: string
+  sortKey: SortKey
+  currentKey: SortKey
+  currentDir: SortDir
+  onSort: (key: SortKey) => void
+}) {
+  const active = currentKey === sortKey
+  return (
+    <th
+      className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-600 select-none transition-colors"
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {label}
+        {active && (
+          <span className="material-symbols-outlined text-blue-500" style={{ fontSize: '14px' }}>
+            {currentDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+          </span>
+        )}
+      </span>
+    </th>
+  )
+}
+
+function getSortValue(e: Experiment, key: SortKey): number | string {
+  switch (key) {
+    case 'id': return e.id
+    case 'tag': return e.tag || ''
+    case 'dataset': return e.dataset_name || ''
+    case 'model': return e.config?.model || ''
+    case 'status': return e.status
+    case 'score': return e.summary?.avg_score ?? -1
+    case 'pass': return e.summary?.total_cases ? e.summary.passed / e.summary.total_cases : -1
+    case 'duration': return e.summary?.avg_duration ?? -1
+    case 'date': return e.created_at
+  }
+}
+
+/** Shorten model name for display (e.g. "claude-sonnet-4-6" → "sonnet-4-6") */
+function shortModel(name: string | undefined): string {
+  if (!name) return ''
+  return name
+    .replace('claude-', '')
+    .replace('openai/', '')
+    .replace('anthropic/', '')
+}
+
 export default function ExperimentsPage() {
   const navigate = useNavigate()
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Production import state
-  const [showImport, setShowImport] = useState(false)
-  const [lfStatus, setLfStatus] = useState<LangfuseStatus | null>(null)
-  const [importDays, setImportDays] = useState(7)
-  const [importLimit, setImportLimit] = useState(20)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<ProductionImportResult | null>(null)
+  // Sort state
+  const [sortKey, setSortKey] = useState<SortKey>('id')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   useEffect(() => {
     listExperiments().then(setExperiments).finally(() => setLoading(false))
   }, [])
 
-  const handleOpenImport = async () => {
-    setShowImport(prev => !prev)
-    if (!lfStatus) {
-      try {
-        const status = await getLangfuseStatus()
-        setLfStatus(status)
-      } catch {
-        setLfStatus({ connected: false, reason: 'Failed to reach eval server' })
-      }
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
     }
   }
 
-  const handleImport = async () => {
-    setImporting(true)
-    setImportResult(null)
-    try {
-      const result = await importProductionTraces({
-        limit: importLimit,
-        days: importDays,
-        run_grading: true,
-      })
-      setImportResult(result)
-      // Refresh experiment list
-      const updated = await listExperiments()
-      setExperiments(updated)
-    } catch (e) {
-      setImportResult({ experiment_id: null, traces_imported: 0, traces_skipped: 0, detail: String(e) })
-    } finally {
-      setImporting(false)
-    }
-  }
+  const sorted = useMemo(() => {
+    const arr = [...experiments]
+    arr.sort((a, b) => {
+      const va = getSortValue(a, sortKey)
+      const vb = getSortValue(b, sortKey)
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb))
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [experiments, sortKey, sortDir])
 
   if (loading) {
     return (
@@ -147,19 +191,6 @@ export default function ExperimentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleOpenImport}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-sm font-medium transition-colors cursor-pointer ${
-              showImport
-                ? 'border-purple-300 bg-purple-50 text-purple-700'
-                : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
-            }`}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-              cloud_download
-            </span>
-            导入生产
-          </button>
           <button
             onClick={() => navigate('/compare')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
@@ -225,207 +256,98 @@ export default function ExperimentsPage() {
         />
       </div>
 
-      {/* ── Production Import Panel ── */}
-      {showImport && (
-        <div className="rounded-xl bg-white border border-purple-200/80 p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-purple-500" style={{ fontSize: '20px' }}>
-                cloud_download
-              </span>
-              <h3 className="text-sm font-semibold text-slate-800">导入生产 Trace（LangFuse）</h3>
-            </div>
-            {lfStatus && (
-              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                lfStatus.connected
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : 'bg-red-50 text-red-600'
-              }`}>
-                {lfStatus.connected ? 'Connected' : 'Disconnected'}
-              </span>
-            )}
-          </div>
-
-          {lfStatus && !lfStatus.connected && (
-            <p className="text-xs text-red-500">{lfStatus.reason}</p>
-          )}
-
-          <div className="flex items-end gap-4">
-            <div>
-              <label className="text-[11px] text-slate-500 font-medium block mb-1">回溯天数</label>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={importDays}
-                onChange={e => setImportDays(Number(e.target.value))}
-                className="w-20 px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-purple-400"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] text-slate-500 font-medium block mb-1">最多导入</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={importLimit}
-                onChange={e => setImportLimit(Number(e.target.value))}
-                className="w-20 px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-purple-400"
-              />
-            </div>
-            <button
-              onClick={handleImport}
-              disabled={importing || (lfStatus != null && !lfStatus.connected)}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-purple-600 text-sm font-medium text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {importing ? (
-                <>
-                  <span className="material-symbols-outlined animate-spin" style={{ fontSize: '14px' }}>progress_activity</span>
-                  导入中...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>download</span>
-                  导入并评分
-                </>
-              )}
-            </button>
-          </div>
-
-          {importResult && (
-            <div className={`text-xs px-3 py-2 rounded-lg ${
-              importResult.experiment_id
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-amber-50 text-amber-700'
-            }`}>
-              {importResult.experiment_id ? (
-                <>
-                  导入完成：{importResult.traces_imported} 条 trace
-                  {importResult.traces_skipped > 0 && `（跳过 ${importResult.traces_skipped} 条）`}
-                  {' — '}
-                  <Link
-                    to={`/experiments/${importResult.experiment_id}`}
-                    className="underline font-medium"
-                  >
-                    查看实验 #{importResult.experiment_id}
-                  </Link>
-                </>
-              ) : (
-                importResult.detail || '没有找到匹配的 trace'
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Experiments table ── */}
       <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100">
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                标签
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                数据集
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Mode
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Commit
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                状态
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                评分
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                通过/总数
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                用时
-              </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                日期
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100/80">
-            {experiments.map(e => (
-              <tr
-                key={e.id}
-                className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                onClick={() => navigate(`/experiments/${e.id}`)}
-              >
-                <td className="px-4 py-3">
-                  <Link
-                    to={`/experiments/${e.id}`}
-                    className="text-blue-600 hover:underline font-medium"
-                    onClick={ev => ev.stopPropagation()}
-                  >
-                    #{e.id}
-                  </Link>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-slate-700 font-medium">
-                    {e.tag || '—'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
-                  {e.dataset_id ? `Dataset #${e.dataset_id}` : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {e.config?.mode ? (
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                      e.config.mode === 'production'
-                        ? 'bg-purple-50 text-purple-600'
-                        : e.config.mode === 'product'
-                          ? 'bg-violet-50 text-violet-600'
-                          : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {e.config.mode}
-                    </span>
-                  ) : <span className="text-slate-300 text-xs">—</span>}
-                </td>
-                <td className="px-4 py-3 text-[10px] text-slate-400 font-mono">
-                  {e.config?.git_commit || '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={e.status} />
-                </td>
-                <td className="px-4 py-3">
-                  {e.summary?.avg_score ? (
-                    <ScoreBadge
-                      score={e.summary.avg_score}
-                      pass={e.summary.avg_score >= 70}
-                      size="sm"
-                    />
-                  ) : (
-                    <span className="text-slate-300">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 tabular-nums text-slate-600">
-                  {e.summary?.total_cases
-                    ? `${e.summary.passed}/${e.summary.total_cases}`
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 tabular-nums text-xs text-slate-500">
-                  {e.summary?.avg_duration
-                    ? `${e.summary.avg_duration.toFixed(0)}s`
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-400">
-                  {new Date(e.created_at * 1000).toLocaleDateString()}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <SortableHeader label="ID" sortKey="id" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="标签" sortKey="tag" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="数据集" sortKey="dataset" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="模型" sortKey="model" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="状态" sortKey="status" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="评分" sortKey="score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="通过/总数" sortKey="pass" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="用时" sortKey="duration" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortableHeader label="日期" sortKey="date" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100/80">
+              {sorted.map(e => (
+                <tr
+                  key={e.id}
+                  className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/experiments/${e.id}`)}
+                >
+                  <td className="px-4 py-3">
+                    <Link
+                      to={`/experiments/${e.id}`}
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={ev => ev.stopPropagation()}
+                    >
+                      #{e.id}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-slate-700 font-medium">
+                      {e.tag || '—'}
+                    </span>
+                    {e.config?.judge_enabled && (
+                      <span className="ml-1.5 text-[9px] font-medium px-1 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200/50">
+                        LLM
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 max-w-[140px] truncate" title={e.dataset_name || `#${e.dataset_id}`}>
+                    {e.dataset_name || `#${e.dataset_id}`}
+                  </td>
+                  <td className="px-4 py-3">
+                    {e.config?.model ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 inline-block w-fit">
+                          {shortModel(e.config.model)}
+                        </span>
+                        {e.config.grading_model && (
+                          <span className="text-[9px] text-slate-400" title={`Grading: ${e.config.grading_model}`}>
+                            judge: {shortModel(e.config.grading_model)}
+                          </span>
+                        )}
+                      </div>
+                    ) : <span className="text-slate-300 text-xs">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={e.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {e.summary?.avg_score ? (
+                      <ScoreBadge
+                        score={e.summary.avg_score}
+                        pass={e.summary.avg_score >= 70}
+                        size="sm"
+                      />
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-slate-600">
+                    {e.summary?.total_cases
+                      ? `${e.summary.passed}/${e.summary.total_cases}`
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-xs text-slate-500">
+                    {e.summary?.avg_duration
+                      ? `${e.summary.avg_duration.toFixed(0)}s`
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    {new Date(e.created_at * 1000).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {experiments.length === 0 && (
           <div className="py-16 text-center text-slate-400">

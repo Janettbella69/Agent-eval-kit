@@ -49,6 +49,8 @@ class ExperimentIn(BaseModel):
     judge_enabled: bool = False
     notes: str = ""                 # free-text notes about this experiment
     mode: str = "benchmark"         # "benchmark" (with hints, 5min) or "product" (no hints, 10min)
+    model: str = ""                 # orchestrator model name (for variable experiments)
+    grading_model: str = ""         # LLM judge model name
 
 
 class Experiment(BaseModel):

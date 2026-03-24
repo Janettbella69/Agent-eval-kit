@@ -13,12 +13,16 @@ Both modes support:
 """
 
 import asyncio
+import logging
+import os
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
     ClaudeAgentOptions,
     ResultMessage,
 )
+
+logger = logging.getLogger(__name__)
 
 from agent.tools import create_eval_tools_server, init_scores, get_scores
 from config import (
@@ -276,14 +280,18 @@ async def run_eval_agent(
         sources_summary=_format_sources(sources),
     )
 
+    env_backup = os.environ.pop("CLAUDECODE", None)
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(message)
             async for msg in client.receive_response():
                 if isinstance(msg, ResultMessage):
                     break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"L2 eval agent error: {e}")
+    finally:
+        if env_backup is not None:
+            os.environ["CLAUDECODE"] = env_backup
 
     # Collect scores from tool calls
     raw_scores = get_scores()
@@ -323,22 +331,32 @@ async def run_eval_grader(
     """
     init_scores()
 
+    # Prevent nested Claude Code session blocking Agent SDK
+    env_backup = os.environ.pop("CLAUDECODE", None)
+
     tools_server = create_eval_tools_server()
     options = _build_options(system_prompt, tools_server, is_l2=False)
 
+    num_turns = 0
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(user_message)
             async for msg in client.receive_response():
                 if isinstance(msg, ResultMessage):
+                    num_turns = getattr(msg, "num_turns", 0) or 0
                     break
-    except Exception:
+    except Exception as e:
+        logger.error(f"LLM grader '{grader_name}' Agent SDK error: {e}")
         return None
+    finally:
+        if env_backup is not None:
+            os.environ["CLAUDECODE"] = env_backup
 
     raw_scores = get_scores()
     grader_data = raw_scores.get(grader_name)
 
     if not grader_data or not isinstance(grader_data, dict):
+        logger.warning(f"LLM grader '{grader_name}' completed (turns={num_turns}) but no score recorded")
         return None
 
     return {
@@ -347,4 +365,5 @@ async def run_eval_grader(
         "details": {},
         "revision_num": grader_data.get("revision_num", 1),
         "revisions": grader_data.get("revisions", []),
+        "num_turns": num_turns,
     }

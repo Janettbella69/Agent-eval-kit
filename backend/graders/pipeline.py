@@ -24,6 +24,7 @@ from graders.code_graders import (
     grade_transcript,
     grade_state_check,
 )
+from graders.retrieval_grader import grade_retrieval_quality
 from graders.l0_structure import grade_structure
 from graders.l0_constraints import grade_constraints
 from graders.l1_metrics import compute_l1_score
@@ -126,6 +127,8 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         _run_code_grader("transcript", grade_transcript, result)
     if effective_weights.get("state_check", 0) > 0:
         _run_code_grader("state_check", grade_state_check, result)
+    if effective_weights.get("retrieval_quality", 0) > 0:
+        _run_code_grader("retrieval_quality", grade_retrieval_quality, result, case.get("query", ""))
 
     # ── LLM Graders (graceful degradation) ──
     judge_prompts: dict[str, str] = {}
@@ -142,12 +145,23 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
                 gt = time.time()
                 try:
                     r = await fn(*args)
+                    # Detect silently-failed LLM graders (returned score=0 with skipped=True)
+                    skipped = r.details.get("skipped", False)
+                    if skipped:
+                        # Don't add to grader_results — let composite rescale without this grader
+                        grading_log.append({
+                            "step": name, "category": "llm", "score": 0,
+                            "weight": 0, "duration_s": round(time.time() - gt, 3),
+                            "status": "skipped", "reason": r.details.get("reason", "unknown"),
+                        })
+                        return
                     r.weight = effective_weights[name]
                     grader_results.append(r)
                     log_entry = {
                         "step": name, "category": "llm", "score": r.score,
                         "weight": r.weight, "duration_s": round(time.time() - gt, 3),
                         "error_types": r.error_types, "status": "ok",
+                        "num_turns": r.details.get("num_turns", 0),
                     }
                     if r.details.get("revision_count", 1) > 1:
                         log_entry["revisions"] = r.details.get("revision_count", 1)

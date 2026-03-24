@@ -123,6 +123,18 @@ async def get_cases(dataset_id: int) -> list[Case]:
     return [_row_to_case(r) for r in rows]
 
 
+async def get_cases_by_keys(keys: list[str]) -> list[Case]:
+    """Get cases by key across all datasets."""
+    db = await get_db()
+    if not keys:
+        return []
+    placeholders = ",".join("?" * len(keys))
+    rows = await db.execute_fetchall(
+        f"SELECT * FROM cases WHERE key IN ({placeholders})", keys,
+    )
+    return [_row_to_case(r) for r in rows]
+
+
 async def get_case_by_key(dataset_id: int, key: str) -> Case | None:
     db = await get_db()
     rows = await db.execute_fetchall(
@@ -210,17 +222,28 @@ async def update_experiment_status(experiment_id: int, status: str, summary: dic
     await db.commit()
 
 
-async def list_experiments(limit: int = 50) -> list[Experiment]:
+async def list_experiments(limit: int = 50) -> list[dict]:
+    """List experiments with dataset name joined."""
     db = await get_db()
     rows = await db.execute_fetchall(
-        "SELECT * FROM experiments ORDER BY created_at DESC LIMIT ?", (limit,),
+        """SELECT e.*, d.name as dataset_name
+           FROM experiments e
+           LEFT JOIN datasets d ON e.dataset_id = d.id
+           ORDER BY e.created_at DESC LIMIT ?""",
+        (limit,),
     )
-    return [Experiment(
-        id=r["id"], dataset_id=r["dataset_id"], tag=r["tag"],
-        status=r["status"], config=json.loads(r["config"]),
-        summary=json.loads(r["summary"]), created_at=r["created_at"],
-        finished_at=r["finished_at"],
-    ) for r in rows]
+    results = []
+    for r in rows:
+        exp = Experiment(
+            id=r["id"], dataset_id=r["dataset_id"], tag=r["tag"],
+            status=r["status"], config=json.loads(r["config"]),
+            summary=json.loads(r["summary"]), created_at=r["created_at"],
+            finished_at=r["finished_at"],
+        )
+        d = exp.model_dump()
+        d["dataset_name"] = r["dataset_name"] or ""
+        results.append(d)
+    return results
 
 
 # ── Traces ────────────────────────────────────────
@@ -967,16 +990,21 @@ async def update_review_status(
 async def get_review_stats() -> dict:
     """Get review coverage statistics."""
     db = await get_db()
-    total = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE status IN ('done', 'graded', 'collected')")
-    reviewed = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'reviewed'")
-    flagged = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'flagged'")
-    pending = await db.execute_fetchone("SELECT COUNT(*) as n FROM traces WHERE review_status = 'pending' AND status IN ('done', 'graded', 'collected')")
 
-    t = total["n"] if total else 0
+    async def _count(sql: str) -> int:
+        cursor = await db.execute(sql)
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    t = await _count("SELECT COUNT(*) FROM traces WHERE status IN ('done', 'graded', 'collected')")
+    r = await _count("SELECT COUNT(*) FROM traces WHERE review_status = 'reviewed'")
+    f = await _count("SELECT COUNT(*) FROM traces WHERE review_status = 'flagged'")
+    p = await _count("SELECT COUNT(*) FROM traces WHERE review_status = 'pending' AND status IN ('done', 'graded', 'collected')")
+
     return {
         "total": t,
-        "reviewed": reviewed["n"] if reviewed else 0,
-        "flagged": flagged["n"] if flagged else 0,
-        "pending": pending["n"] if pending else 0,
-        "coverage_pct": round((reviewed["n"] if reviewed else 0) / max(t, 1) * 100, 1),
+        "reviewed": r,
+        "flagged": f,
+        "pending": p,
+        "coverage_pct": round(r / max(t, 1) * 100, 1),
     }

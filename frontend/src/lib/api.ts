@@ -1,4 +1,4 @@
-import type { Dataset, Case, Experiment, Trace, ExperimentSummary, SaturationCase, CaseHistoryEntry, GradingLogEntry, HumanScore, JudgeAlignment, CompareResult, CodingAnalysis, AnalysisResult, StalenessReport, ReviewQueueItem, ReviewStats, ProductionImportResult, LangfuseStatus } from '../types.ts'
+import type { Dataset, Case, Experiment, Trace, ExperimentSummary, SaturationCase, CaseHistoryEntry, GradingLogEntry, HumanScore, JudgeAlignment, CompareResult, CodingAnalysis, AnalysisResult, StalenessReport, ReviewQueueItem, ReviewStats } from '../types.ts'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '') + '/api'
 
@@ -133,16 +133,3 @@ export const updateReviewStatus = (traceId: number, status: string, notes: strin
   })
 
 export const getReviewStats = () => fetchJSON<ReviewStats>('/traces/review-stats')
-
-// Production Import (LangFuse → Eval)
-export const getLangfuseStatus = () => fetchJSON<LangfuseStatus>('/production/status')
-
-export const importProductionTraces = (body: {
-  limit?: number
-  days?: number
-  tag?: string
-  run_grading?: boolean
-  experiment_tag?: string
-}) => fetchJSON<ProductionImportResult>('/production/import', {
-  method: 'POST', body: JSON.stringify(body),
-})

@@ -38,19 +38,27 @@ class GraderDef:
 
 # Standard grader weights (normal cases)
 # Weights sum to 1.0; composite.py normalizes if some graders are skipped.
+# Weights rebalanced per Hamel eval-audit findings (2026-03-15):
+# - rubric_coverage (code) demoted: keyword matching is a weak signal, especially for CJK
+# - rubric_compliance (LLM) promoted: semantic evaluation is the real rubric check
+# - groundedness (LLM) kept high: hallucination detection is critical
+# - Weights sum ~1.0; composite.py normalizes if some graders are skipped
 GRADER_DEFS = [
-    GraderDef("rubric_coverage",       0.15, "code", requires_golden=True),
-    GraderDef("product_matching",      0.10, "code", requires_golden=True),
-    GraderDef("rubric_compliance",     0.10, "llm",  requires_golden=True),
-    GraderDef("groundedness",          0.15, "llm"),
-    GraderDef("source_authority",      0.10, "code"),
+    # Code graders (~40% total) — deterministic, instant, cheap
+    GraderDef("rubric_coverage",       0.03, "code", requires_golden=True),  # keyword match weak for CJK
+    GraderDef("product_matching",      0.08, "code", requires_golden=True),
+    GraderDef("source_authority",      0.08, "code"),
     GraderDef("output_format",         0.05, "code"),
+    GraderDef("efficiency",            0.03, "code"),   # fixed: empty results → 0, not 100
+    GraderDef("tool_calls",            0.04, "code"),
+    GraderDef("transcript",            0.04, "code"),
+    GraderDef("state_check",           0.00, "code"),   # disabled: duplicates gate checks
+    GraderDef("retrieval_quality",     0.05, "code"),
+    # LLM graders (~60% total) — semantic evaluation, the real judges
+    GraderDef("rubric_compliance",     0.25, "llm",  requires_golden=True),  # core semantic rubric check
+    GraderDef("groundedness",          0.18, "llm"),   # hallucination detection
+    GraderDef("actionability",         0.12, "llm"),   # purchase decision quality
     GraderDef("trap_detection",        0.05, "llm",  requires_golden=True),
-    GraderDef("actionability",         0.10, "llm"),
-    GraderDef("efficiency",            0.05, "code"),
-    GraderDef("tool_calls",            0.05, "code"),
-    GraderDef("transcript",            0.05, "code"),
-    GraderDef("state_check",           0.05, "code"),
 ]
 
 # Trap case weight overrides
@@ -58,15 +66,16 @@ TRAP_WEIGHT_OVERRIDES = {
     "trap_detection":        0.35,
     "groundedness":          0.15,
     "product_matching":      0.05,
-    "rubric_coverage":       0.00,  # skip
-    "rubric_compliance":     0.00,  # skip
+    "rubric_coverage":       0.00,
+    "rubric_compliance":     0.00,
     "source_authority":      0.10,
     "output_format":         0.05,
     "actionability":         0.10,
-    "efficiency":            0.05,
+    "efficiency":            0.03,
     "tool_calls":            0.05,
     "transcript":            0.05,
-    "state_check":           0.05,
+    "state_check":           0.00,  # disabled
+    "retrieval_quality":     0.00,
 }
 
 # Failure funnel stages (in order)

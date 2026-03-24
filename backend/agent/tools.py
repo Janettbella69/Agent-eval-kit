@@ -151,4 +151,8 @@ async def verify_url(args: dict[str, Any]) -> dict[str, Any]:
 
 def create_eval_tools_server():
     """Create an in-process MCP server with eval tools."""
-    return create_sdk_mcp_server([score_grader, score_dimension, verify_url])
+    return create_sdk_mcp_server(
+        name="eval-tools",
+        version="1.0.0",
+        tools=[score_grader, score_dimension, verify_url],
+    )

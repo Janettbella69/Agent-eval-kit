@@ -27,8 +27,7 @@ def _get_git_commit() -> str:
 
 @router.get("")
 async def list_experiments():
-    experiments = await queries.list_experiments()
-    return [e.model_dump() for e in experiments]
+    return await queries.list_experiments()
 
 
 # IMPORTANT: /compare MUST be before /{experiment_id} to avoid path param conflict
@@ -53,13 +52,30 @@ async def create_experiment(body: ExperimentIn):
     if not dataset:
         return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
 
-    # Auto-capture git commit and prompt version
+    # Auto-capture git commit, prompt version, and model info
     git_commit = _get_git_commit()
     try:
         from config import PROMPT_VERSION
         prompt_version = PROMPT_VERSION
     except (ImportError, AttributeError):
         prompt_version = ""
+
+    # Auto-detect model names from config if not explicitly provided
+    model = body.model
+    grading_model = body.grading_model
+    if not model:
+        try:
+            from config import PRODUCT_API_URL
+            import os
+            model = os.getenv("ORCHESTRATOR_MODEL", "claude-sonnet-4-6")
+        except Exception:
+            pass
+    if not grading_model:
+        try:
+            from config import GRADING_MODEL
+            grading_model = GRADING_MODEL
+        except Exception:
+            pass
 
     config = {
         "cases": body.cases,
@@ -70,6 +86,8 @@ async def create_experiment(body: ExperimentIn):
         "prompt_version": prompt_version,
         "notes": body.notes,
         "mode": body.mode,
+        "model": model,
+        "grading_model": grading_model,
     }
     experiment_id = await queries.create_experiment(body.dataset_id, body.tag, config)
     return {"id": experiment_id}

@@ -17,47 +17,35 @@ from runner.collector import CollectedResult
 # ── Rubric Coverage ──────────────────────────────
 
 def _extract_keywords(rubric_text: str) -> list[str]:
-    """Extract technical keywords from rubric text for coverage checking."""
-    # Common technical patterns: numbers with units, specific terms
+    """Extract high-confidence technical keywords from rubric text.
+
+    Only extracts "hard" signals that are reliable for string matching:
+    - Numbers with units (4K, 500g, 30fps, 10-bit, 30 hours)
+    - Acronyms/tech terms (ANC, HDR, OLED, USB-C)
+    - Quoted terms
+    - Brand/product names (capitalized multi-word)
+
+    Does NOT extract multi-word phrases or CJK sentences — those produce
+    false negatives. Semantic rubric evaluation is handled by rubric_compliance (LLM).
+    """
     keywords = set()
 
-    # Numbers with units (e.g., "4K", "500g", "30p", "10-bit", "30 hours")
-    for m in re.finditer(r'\b\d+(?:\.\d+)?(?:\s*[-]?\s*(?:kg|g|mm|cm|hz|mhz|ghz|mp|fps|p|k|bit|hours?|hr|mins?|dB|cd|nit|lux|mAh|wh|watts?|W|inch|inches|"|lbs?|oz))\b', rubric_text, re.IGNORECASE):
+    # 1. Numbers with units — use (?<![a-zA-Z]) instead of \b for CJK compatibility
+    for m in re.finditer(
+        r'(?<![a-zA-Z])\d+(?:\.\d+)?(?:\s*[-]?\s*(?:kg|g|mm|cm|hz|mhz|ghz|mp|fps|p|k|bit|hours?|hr|mins?|dB|cd|nit|lux|mAh|wh|watts?|W|inch|inches|"|lbs?|oz|克|毫米|厘米|英寸|小时))',
+        rubric_text, re.IGNORECASE
+    ):
         keywords.add(m.group().lower().strip())
 
-    # Acronyms and tech terms (2+ uppercase chars or specific patterns)
-    for m in re.finditer(r'\b[A-Z]{2,}[a-z]?\d*\b', rubric_text):
-        keywords.add(m.group().lower())
-
-    # Quoted terms
-    for m in re.finditer(r"'([^']+)'|\"([^\"]+)\"", rubric_text):
-        term = (m.group(1) or m.group(2)).lower()
-        if len(term) > 2:
+    # 2. Acronyms and tech terms (2+ uppercase letters)
+    for m in re.finditer(r'(?<![a-zA-Z])[A-Z]{2,}(?:[-/][A-Z0-9]+)*\d*(?![a-z])', rubric_text):
+        term = m.group().lower()
+        if len(term) >= 2:
             keywords.add(term)
 
-    # Key product-relevant nouns (filter common words)
-    stop_words = {"the", "and", "for", "with", "that", "this", "from", "must", "should",
-                  "have", "not", "are", "can", "will", "need", "also", "than", "more",
-                  "less", "all", "any", "each", "has", "its", "was", "were", "been",
-                  "being", "had", "but", "which", "their", "them", "they", "what",
-                  "when", "where", "who", "how", "why", "product", "camera", "phone",
-                  "customer", "user", "requirements", "therefore", "following", "conditions",
-                  "meet", "ensure", "able", "required", "needs", "core", "key"}
-
-    # Multi-word terms that appear between commas or semicolons
-    segments = re.split(r'[,;•\n]', rubric_text)
-    for seg in segments:
-        seg = seg.strip().lower()
-        if 3 < len(seg) < 60:
-            words = seg.split()
-            # Keep multi-word terms that have at least one non-stop word
-            if len(words) >= 2 and any(w not in stop_words for w in words):
-                # Take key phrases: 2-4 word combinations
-                for i in range(len(words)):
-                    for j in range(i + 2, min(i + 5, len(words) + 1)):
-                        phrase = " ".join(words[i:j])
-                        if any(w not in stop_words for w in words[i:j]):
-                            keywords.add(phrase)
+    # 3. Quoted terms
+    for m in re.finditer(r"['\"\u201c\u201d]([^'\"\u201c\u201d]{3,30})['\"\u201c\u201d]", rubric_text):
+        keywords.add(m.group(1).lower())
 
     return [k for k in keywords if len(k) > 1]
 
@@ -121,7 +109,8 @@ def grade_product_matching(result: CollectedResult, golden_data: dict) -> Grader
 
     golden_names = []
     for p in product_list:
-        name = p.get("name", "") if isinstance(p, dict) else str(p)
+        # ShoppingComp uses "product_name"; other datasets may use "name"
+        name = (p.get("name") or p.get("product_name", "")) if isinstance(p, dict) else str(p)
         if name:
             golden_names.append(name)
 
@@ -257,13 +246,45 @@ def _get_domain_tier(domain: str) -> int:
     return 6  # Unknown → T6 (SEO/unverified)
 
 
+def _extract_reference_domains(golden_data: dict) -> set[str]:
+    """Extract expected source domains from ShoppingComp product_list annotations.
+
+    Collects reference.urls from all product → scene_annotation_list entries.
+    Returns a set of bare domains (no www.) for overlap calculation.
+    """
+    domains: set[str] = set()
+    for p in golden_data.get("product_list", []):
+        if not isinstance(p, dict):
+            continue
+        for sa in p.get("scene_annotation_list", []):
+            if not isinstance(sa, dict):
+                continue
+            ref = sa.get("reference", {})
+            if not isinstance(ref, dict):
+                continue
+            for url in ref.get("urls", []):
+                try:
+                    domain = urlparse(url).netloc.lower().lstrip("www.")
+                    if domain:
+                        domains.add(domain)
+                except Exception:
+                    pass
+    return domains
+
+
 def grade_source_authority(result: CollectedResult, golden_data: dict) -> GraderResult:
     """Source authority: tier-weighted scoring based on T1-T6 credibility hierarchy.
 
-    Score components:
+    Score components (base — no reference URLs):
     - Tier-weighted average (60%): higher tiers = higher score
     - T1/T2 presence (25%): at least 2 authoritative sources
-    - Tier diversity (15%): sources span multiple tiers (well-rounded research)
+    - Tier diversity (15%): sources span multiple tiers
+
+    Score components (ShoppingComp mode — reference URLs available):
+    - Tier-weighted average (45%)
+    - T1/T2 presence (20%)
+    - Tier diversity (10%)
+    - Reference domain overlap (25%): agent cited expert-curated sources
     """
     sources = result.sources
     if not sources:
@@ -273,6 +294,7 @@ def grade_source_authority(result: CollectedResult, golden_data: dict) -> Grader
     tier_counts: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
     tier_examples: dict[int, list[str]] = {t: [] for t in range(1, 7)}
     tier_scores_list: list[float] = []
+    agent_domains: set[str] = set()
 
     for s in sources:
         url = s.get("url", "") if isinstance(s, dict) else ""
@@ -280,6 +302,7 @@ def grade_source_authority(result: CollectedResult, golden_data: dict) -> Grader
             continue
         try:
             domain = urlparse(url).netloc.lower().lstrip("www.")
+            agent_domains.add(domain)
             tier = _get_domain_tier(domain)
             tier_counts[tier] = tier_counts.get(tier, 0) + 1
             tier_scores_list.append(TIER_SCORES.get(tier, 10))
@@ -293,24 +316,44 @@ def grade_source_authority(result: CollectedResult, golden_data: dict) -> Grader
         return GraderResult(name="source_authority", score=0, weight=0.10, category="code",
                             details={"no_parseable_sources": True}, error_types=["no_sources"])
 
-    # Component 1: Tier-weighted average (60%)
+    # Component 1: Tier-weighted average
     avg_tier_score = sum(tier_scores_list) / len(tier_scores_list)
 
-    # Component 2: T1/T2 presence (25%) — want at least 2
+    # Component 2: T1/T2 presence — want at least 2
     t1_t2 = tier_counts.get(1, 0) + tier_counts.get(2, 0)
     t1_t2_score = min(t1_t2 / 2, 1.0) * 100
 
-    # Component 3: Tier diversity (15%) — sources from 3+ different tiers is ideal
+    # Component 3: Tier diversity — sources from 3+ different tiers is ideal
     active_tiers = sum(1 for t, c in tier_counts.items() if c > 0)
     diversity_score = min(active_tiers / 3, 1.0) * 100
 
-    score = round(avg_tier_score * 0.60 + t1_t2_score * 0.25 + diversity_score * 0.15, 1)
+    # Component 4 (ShoppingComp only): reference domain overlap
+    ref_domains = _extract_reference_domains(golden_data)
+    ref_domain_overlap: float | None = None
+    if ref_domains:
+        matched = agent_domains & ref_domains
+        # Partial credit: citing ≥50% of expected domains = full marks
+        ref_domain_overlap = round(len(matched) / len(ref_domains), 3)
+        ref_overlap_score = min(ref_domain_overlap / 0.5, 1.0) * 100
+        # ShoppingComp weights: tier(45) + t1t2(20) + diversity(10) + ref_overlap(25)
+        score = round(
+            avg_tier_score * 0.45
+            + t1_t2_score * 0.20
+            + diversity_score * 0.10
+            + ref_overlap_score * 0.25,
+            1,
+        )
+    else:
+        # Base weights: tier(60) + t1t2(25) + diversity(15)
+        score = round(avg_tier_score * 0.60 + t1_t2_score * 0.25 + diversity_score * 0.15, 1)
 
     error_types = []
     if t1_t2 == 0:
         error_types.append("no_authoritative_sources")
     if tier_counts.get(6, 0) > len(tier_scores_list) * 0.5:
         error_types.append("majority_unverified_sources")
+    if ref_domains and ref_domain_overlap is not None and ref_domain_overlap < 0.2:
+        error_types.append("low_reference_overlap")
 
     # Build readable tier breakdown
     tier_breakdown = {}
@@ -321,15 +364,21 @@ def grade_source_authority(result: CollectedResult, golden_data: dict) -> Grader
                 "examples": tier_examples[t],
             }
 
+    details: dict = {
+        "tier_breakdown": tier_breakdown,
+        "t1_t2_count": t1_t2,
+        "total_sources": len(sources),
+        "avg_tier_score": round(avg_tier_score, 1),
+        "active_tiers": active_tiers,
+    }
+    if ref_domains:
+        details["ref_domains_expected"] = sorted(ref_domains)
+        details["ref_domains_matched"] = sorted(agent_domains & ref_domains)
+        details["ref_domain_overlap"] = ref_domain_overlap
+
     return GraderResult(
         name="source_authority", score=score, weight=0.10, category="code",
-        details={
-            "tier_breakdown": tier_breakdown,
-            "t1_t2_count": t1_t2,
-            "total_sources": len(sources),
-            "avg_tier_score": round(avg_tier_score, 1),
-            "active_tiers": active_tiers,
-        },
+        details=details,
         error_types=error_types,
     )
 
@@ -418,9 +467,19 @@ def grade_efficiency(result: CollectedResult) -> GraderResult:
     """Multi-factor efficiency: turn, token, and search efficiency."""
     hm = result.hook_metrics
     search_count = hm.get("search_count", 0)
-    product_count = hm.get("product_count", 0) or len(result.products) or 1
+    product_count = hm.get("product_count", 0) or len(result.products)
     turn_count = hm.get("num_turns", 0) or result.turn_count or 0
     output_tokens = hm.get("output_tokens", 0) or result.output_tokens or 0
+
+    # Empty results = 0 efficiency (nothing was accomplished)
+    if product_count == 0 and len(result.guide_text) < 200:
+        return GraderResult(
+            name="efficiency", score=0, weight=0.05, category="code",
+            details={"reason": "no output produced"},
+            error_types=["no_output"],
+        )
+
+    product_count = max(product_count, 1)  # avoid division by zero below
 
     # Turn efficiency (40%): under 15 turns = perfect, 40+ = low
     if turn_count <= 15:

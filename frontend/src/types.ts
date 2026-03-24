@@ -48,6 +48,7 @@ export interface SceneAnnotation {
 export interface Experiment {
   id: number
   dataset_id: number
+  dataset_name?: string
   tag: string
   status: string
   config: ExperimentConfig
@@ -62,6 +63,12 @@ export interface ExperimentConfig {
   trials: number
   concurrency: number
   judge_enabled: boolean
+  model?: string
+  grading_model?: string
+  git_commit?: string
+  prompt_version?: string
+  mode?: string
+  notes?: string
 }
 
 export interface ExperimentSummary {
@@ -302,22 +309,6 @@ export interface ReviewStats {
   flagged: number
   pending: number
   coverage_pct: number
-}
-
-// ── Production Import (LangFuse → Eval) ─────
-export interface ProductionImportResult {
-  experiment_id: number | null
-  dataset_id?: number
-  traces_imported: number
-  traces_skipped: number
-  detail?: string
-}
-
-export interface LangfuseStatus {
-  connected: boolean
-  reason?: string
-  host?: string
-  trace_count?: number
 }
 
 export interface WsMessage {

@@ -118,9 +118,221 @@ async def get_coding_analysis(experiment_id: int | None = None):
     return {"open_codes": open_codes, "axial_codes": axial_codes, "total_traces": len(rows)}
 
 
+@router.get("/error-taxonomy")
+async def get_error_taxonomy():
+    """Get the structured error taxonomy for annotation guidance."""
+    from graders.error_taxonomy import get_taxonomy_summary
+    return {"taxonomy": get_taxonomy_summary()}
+
+
 # ── AI Trace Analysis (Module 11) ──
+# Model: openai/gpt-5.4 via OpenRouter (same as L2 judge)
+# Provides deep trace analysis with full grader context + error taxonomy
 
 _analysis_results: dict[str, dict] = {}  # request_id → {status, result, error}
+_ANALYSIS_TTL = 3600  # 1 hour TTL for results
+
+
+def _cleanup_stale_results():
+    """Remove analysis results older than TTL."""
+    now = time.time()
+    stale = [k for k, v in _analysis_results.items()
+             if now - v.get("started_at", now) > _ANALYSIS_TTL]
+    for k in stale:
+        del _analysis_results[k]
+
+
+# System prompt with eval domain knowledge + error taxonomy
+_ANALYSIS_SYSTEM_PROMPT = """You are a senior eval analyst for a Shopping Research Agent.
+
+## Your Role
+You analyze evaluation traces to diagnose WHY the agent succeeded or failed.
+You have deep knowledge of the agent's architecture and grading pipeline.
+
+## Agent Architecture
+The shopping agent: receives a user query → clarifies if ambiguous → searches for products/reviews → synthesizes a buyer's guide with product recommendations.
+
+## Grading Pipeline (what produced the scores you see)
+- **L0 Gate**: Binary pass/fail structure checks (has_guide, has_products, has_sources, no_error)
+- **Code Graders** (0-100): rubric_coverage, product_matching, source_authority, output_format, efficiency, tool_calls, transcript, state_check, retrieval_quality
+- **LLM Graders** (0-100, via GPT-5.4): rubric_compliance, groundedness, actionability, trap_detection
+- **Composite**: Weighted average → final_score → PASS if ≥70
+
+## Failure Funnel Stages
+The failure funnel identifies the FIRST stage that broke:
+1. **understand**: Agent didn't grasp the query (0 searches, very low actionability)
+2. **search**: Searched but found nothing useful (0 products AND 0 sources)
+3. **extract**: Found sources but failed to extract product data
+4. **match_rubric**: Products don't match golden expectations (score <30)
+5. **generate**: Has products but output is malformed or too short
+
+## Error Taxonomy (14 categories, 4 stages)
+### Retrieval failures
+- `retrieval.insufficient_search`: Too few/narrow searches for the query's complexity
+- `retrieval.wrong_category`: Searched for wrong product category entirely
+- `retrieval.search_loop`: 3+ consecutive searches with no new information
+- `retrieval.missed_expert_source`: Missed the obvious expert source (RTINGS for headphones, etc.)
+
+### Extraction failures
+- `extraction.stale_price`: Price doesn't match current market (>15% deviation)
+- `extraction.discontinued_product`: Product is discontinued/recalled/unavailable
+- `extraction.wrong_spec`: Technical spec is incorrect
+- `extraction.phantom_citation`: Source cited doesn't support the claim
+
+### Generation failures
+- `generation.hallucinated_feature`: Feature that doesn't exist on the product
+- `generation.missing_tradeoff`: Recommends without mentioning significant drawbacks
+- `generation.promotional_tone`: Marketing copy instead of objective research
+- `generation.wrong_audience`: Recommendations don't match user's stated needs/budget
+
+### Format failures
+- `format.no_comparison`: No side-by-side comparison table
+- `format.no_purchase_path`: No prices, links, or where-to-buy info
+
+## Analysis Guidelines
+1. Start with the failure funnel stage — WHERE in the pipeline did things go wrong?
+2. Map raw error_types to the taxonomy above — WHAT specifically failed?
+3. Check grader scores for patterns — which dimensions are consistently low?
+4. Look at the operation log — did the agent's search strategy make sense?
+5. Check retrieval_quality diagnosis — is this a retrieval or generation problem?
+6. Provide actionable fixes — not just "improve search" but specific changes
+
+## Output Format
+Structure your analysis as:
+1. **Root Cause**: The primary reason this trace failed/succeeded (1-2 sentences)
+2. **Evidence**: Specific data points from grader scores, error types, and events
+3. **Taxonomy Classification**: Which error categories apply
+4. **Fix Recommendations**: Concrete, actionable suggestions
+5. **Severity**: Critical / Major / Minor"""
+
+
+def _build_trace_context(t) -> str:
+    """Build rich analysis context for a single trace."""
+    parts = []
+
+    # Header
+    parts.append(
+        f"## Trace #{t.id}: {t.case_key} (trial {t.trial_num})\n"
+        f"**Query**: {t.query}\n"
+        f"**Score**: {t.final_score:.1f} | **Pass**: {t.final_pass} | **Duration**: {t.duration_s:.1f}s\n"
+        f"**Turns**: {t.turn_count} | **Products**: {len(t.products)} | **Sources**: {len(t.sources)}"
+    )
+
+    # Failure funnel
+    if t.failure_funnel and t.failure_funnel.get("stage"):
+        parts.append(
+            f"\n### Failure Funnel\n"
+            f"**First failing stage**: {t.failure_funnel['stage']}\n"
+            f"**Reason**: {t.failure_funnel.get('reason', 'unknown')}\n"
+            f"**All stages**: {', '.join(f'{k}={v}' for k, v in t.failure_funnel.get('stages', {}).items())}"
+        )
+
+    # Grader scores with details
+    if t.composite_scores:
+        parts.append("\n### Grader Scores")
+        for name, data in sorted(t.composite_scores.items(), key=lambda x: x[1].get("score", 0) if isinstance(x[1], dict) else 0):
+            if not isinstance(data, dict):
+                continue
+            score = data.get("score", 0)
+            weight = data.get("weight", 0)
+            category = data.get("category", "?")
+            flag = "🔴" if score < 40 else "🟡" if score < 70 else "✅"
+            line = f"  {flag} **{name}**: {score:.0f}/100 (weight={weight:.2f}, {category})"
+            # Include reasoning for LLM graders
+            details = data.get("details", {})
+            if isinstance(details, dict):
+                reasoning = details.get("reasoning", "")
+                if reasoning:
+                    line += f"\n    Reasoning: {reasoning[:300]}"
+                # Include diagnosis for retrieval_quality
+                diagnosis = details.get("diagnosis", "")
+                if diagnosis:
+                    line += f"\n    Diagnosis: {diagnosis}"
+            parts.append(line)
+
+    # Error types + taxonomy classification
+    if t.error_types:
+        parts.append(f"\n### Raw Error Types\n{', '.join(t.error_types)}")
+        try:
+            from graders.error_taxonomy import classify_error_types
+            classified = classify_error_types(t.error_types)
+            if classified:
+                parts.append("\n### Classified Errors (from taxonomy)")
+                for c in classified:
+                    parts.append(f"  - **{c['severity'].upper()}** [{c['stage']}] {c['code']}: {c['name']}")
+        except Exception:
+            pass
+
+    if t.open_codes:
+        parts.append(f"\n### Open Codes: {', '.join(t.open_codes)}")
+
+    # Products summary
+    if t.products:
+        parts.append(f"\n### Products ({len(t.products)})")
+        for i, p in enumerate(t.products[:8], 1):
+            if isinstance(p, dict):
+                name = p.get("name", "?")
+                price = p.get("price", "N/A")
+                url = p.get("purchaseUrl", "")
+                parts.append(f"  {i}. {name} — {price}" + (f" [{url[:50]}]" if url else ""))
+
+    # Sources summary
+    if t.sources:
+        parts.append(f"\n### Sources ({len(t.sources)})")
+        for i, s in enumerate(t.sources[:10], 1):
+            if isinstance(s, dict):
+                title = s.get("title", "?")
+                domain = s.get("domain", "")
+                parts.append(f"  {i}. {title} ({domain})")
+
+    # Guide text (expanded: 5000 chars for single trace, 3000 for multi)
+    guide_limit = 5000 if len(t.guide_text) > 0 else 0
+    if t.guide_text:
+        preview = t.guide_text[:guide_limit]
+        if len(t.guide_text) > guide_limit:
+            preview += f"\n... [truncated, {len(t.guide_text)} total chars]"
+        parts.append(f"\n### Guide Text\n{preview}")
+
+    # Operation log: search queries + fetch URLs + errors
+    events = t.events or []
+    search_queries = []
+    fetch_urls = []
+    errors = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        etype = ev.get("type", "")
+        if etype == "search_progress":
+            q = ev.get("query", ev.get("phase", ""))
+            if q and q not in search_queries:
+                search_queries.append(q)
+        elif etype == "error":
+            errors.append(ev.get("message", "?")[:150])
+
+    if search_queries:
+        parts.append(f"\n### Search Queries ({len(search_queries)})")
+        for i, q in enumerate(search_queries[:20], 1):
+            parts.append(f"  {i}. {q}")
+
+    if errors:
+        parts.append(f"\n### Errors ({len(errors)})")
+        for err in errors[:5]:
+            parts.append(f"  ⚠ {err}")
+
+    # Grading log summary
+    if t.grading_log:
+        parts.append(f"\n### Grading Pipeline Log")
+        for entry in t.grading_log:
+            if not isinstance(entry, dict):
+                continue
+            step = entry.get("step", "?")
+            status = entry.get("status", "?")
+            score = entry.get("score")
+            duration = entry.get("duration_s", 0)
+            if score is not None:
+                parts.append(f"  {step}: {score:.0f} ({status}, {duration:.1f}s)")
+
+    return "\n".join(parts)
 
 
 @router.post("/analyze")
@@ -131,6 +343,8 @@ async def start_trace_analysis(body: dict):
         trace_ids: list[int] — traces to analyze
         question: str — analysis question (e.g. "Why did this trace fail?")
     """
+    _cleanup_stale_results()
+
     trace_ids = body.get("trace_ids", [])
     question = body.get("question", "")
     if not trace_ids or not question:
@@ -154,7 +368,7 @@ async def get_analysis_result(request_id: str):
 
 
 async def _run_analysis(request_id: str, trace_ids: list[int], question: str):
-    """Background task: load traces, build context, call Claude for analysis."""
+    """Background task: load traces, build rich context, call GPT-5.4 via OpenRouter."""
     try:
         traces = []
         for tid in trace_ids[:5]:  # Cap at 5 traces to limit context
@@ -169,67 +383,59 @@ async def _run_analysis(request_id: str, trace_ids: list[int], question: str):
             }
             return
 
-        # Build analysis context
+        # Build rich context for each trace
+        # Adjust guide text limit based on number of traces
         context_parts = []
         for t in traces:
-            summary = (
-                f"## Trace #{t.id}: {t.case_key} (trial {t.trial_num})\n"
-                f"Query: {t.query}\n"
-                f"Score: {t.final_score:.1f} | Pass: {t.final_pass} | Duration: {t.duration_s:.1f}s\n"
-                f"Turns: {t.turn_count} | Products: {len(t.products)} | Sources: {len(t.sources)}\n"
-            )
-            if t.failure_funnel and t.failure_funnel.get("stage"):
-                summary += f"Failure Stage: {t.failure_funnel['stage']} — {t.failure_funnel.get('reason', '')}\n"
-            if t.error_types:
-                summary += f"Error Types: {', '.join(t.error_types)}\n"
-            if t.composite_scores:
-                scores_str = ", ".join(f"{k}: {v.get('score', 0):.0f}" for k, v in t.composite_scores.items() if isinstance(v, dict))
-                summary += f"Grader Scores: {scores_str}\n"
-            if t.open_codes:
-                summary += f"Open Codes: {', '.join(t.open_codes)}\n"
+            context_parts.append(_build_trace_context(t))
 
-            # Truncate guide text
-            guide_preview = t.guide_text[:2000] + "..." if len(t.guide_text) > 2000 else t.guide_text
-            summary += f"\n### Guide Preview:\n{guide_preview}\n"
+        full_context = "\n\n---\n\n".join(context_parts)
 
-            # Event summary (tool calls)
-            tool_events = [e for e in t.events if isinstance(e, dict) and e.get("type") in ("search_progress", "product_found")]
-            if tool_events:
-                summary += f"\n### Key Events ({len(tool_events)} tool-related):\n"
-                for ev in tool_events[:10]:
-                    summary += f"- {ev.get('type')}: {ev.get('query', ev.get('product', {}).get('name', ''))}\n"
-
-            context_parts.append(summary)
-
-        full_context = "\n---\n".join(context_parts)
-
-        # Call Claude for analysis
+        # Call GPT-5.4 via OpenRouter (same routing as L2 judge)
         try:
+            import os
             import anthropic
-            client = anthropic.AsyncAnthropic()
+
+            base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+            auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+            # Use OpenRouter if configured, otherwise direct Anthropic
+            if base_url and auth_token:
+                client = anthropic.AsyncAnthropic(
+                    base_url=base_url,
+                    api_key=auth_token,
+                )
+                model = os.getenv("GRADING_MODEL", "openai/gpt-5.4")
+            elif api_key:
+                client = anthropic.AsyncAnthropic(api_key=api_key)
+                model = "claude-sonnet-4-6"
+            else:
+                raise RuntimeError("No API key configured (ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)")
+
             response = await client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
+                model=model,
+                max_tokens=4000,
+                system=_ANALYSIS_SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": f"""You are an eval analysis assistant for a Shopping Research Agent.
-Analyze the following trace(s) and answer the user's question.
+                    "content": f"""Analyze the following trace(s) and answer my question.
 
 {full_context}
 
-Question: {question}
+---
 
-Provide a structured analysis with:
-1. Direct answer to the question
-2. Key observations from the trace data
-3. Suggested improvements or action items
+**Question**: {question}
 
-Be concise and specific. Reference trace IDs and scores where relevant."""
+Provide a structured analysis following the output format in your system prompt.
+Reference specific trace IDs, grader scores, and error taxonomy codes."""
                 }],
             )
             result_text = response.content[0].text if response.content else "No response generated."
+            model_used = model
         except Exception as e:
-            result_text = f"Claude API unavailable. Manual analysis context:\n\n{full_context[:3000]}\n\n(Error: {str(e)[:200]})"
+            result_text = f"AI analysis unavailable. Manual analysis context:\n\n{full_context[:5000]}\n\n(Error: {str(e)[:200]})"
+            model_used = "fallback"
 
         _analysis_results[request_id] = {
             "status": "done",
@@ -237,6 +443,7 @@ Be concise and specific. Reference trace IDs and scores where relevant."""
             "error": None,
             "finished_at": time.time(),
             "trace_count": len(traces),
+            "model": model_used,
         }
     except Exception as e:
         _analysis_results[request_id] = {
@@ -266,6 +473,25 @@ async def get_review_queue(
 async def get_review_stats():
     """Get review coverage statistics."""
     return await queries.get_review_stats()
+
+
+@router.get("/{trace_id}/classified-errors")
+async def get_classified_errors(trace_id: int):
+    """Get errors classified against the structured taxonomy."""
+    trace = await queries.get_trace(trace_id)
+    if not trace:
+        return JSONResponse(status_code=404, content={"detail": "Trace not found."})
+
+    from graders.error_taxonomy import classify_error_types, prioritize_errors
+    classified = classify_error_types(trace.error_types)
+    prioritized = prioritize_errors(classified)
+    return {
+        "trace_id": trace_id,
+        "raw_error_types": trace.error_types,
+        "classified": prioritized,
+        "total_raw": len(trace.error_types),
+        "total_classified": len(prioritized),
+    }
 
 
 @router.get("/{trace_id}")

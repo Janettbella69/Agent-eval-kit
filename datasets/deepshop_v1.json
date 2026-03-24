@@ -1,6 +1,6 @@
 {
-  "name": "DeepShop V1",
-  "description": "5 cases with structured constraints for deep research quality testing",
+  "name": "DeepShop V1 (DEPRECATED)",
+  "description": "DEPRECATED: AI-generated cases without golden_data. Use ShoppingComp instead. Kept for backward compatibility with existing experiments.",
   "cases": [
     {
       "key": "ds_noise_cancel",
