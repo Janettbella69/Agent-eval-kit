@@ -217,4 +217,58 @@ async def import_shoppingcomp_endpoint(file_path: str, name: str, description: s
         "imported": result.imported,
         "skipped": result.skipped,
         "types": result.types,
+        "categories": result.categories,
     }
+
+
+@router.post("/import-shoppingcomp-all")
+async def import_shoppingcomp_all():
+    """Import all 4 ShoppingComp JSONL files (EN/ZH × regular/trap)."""
+    from loaders.shoppingcomp import import_shoppingcomp
+
+    # ShoppingComp files live at <repo_root>/datasets/ShoppingComp/
+    sc_dir = DATASETS_DIR.parent.parent / "datasets" / "ShoppingComp"
+
+    files = [
+        {
+            "path": sc_dir / "ShoppingComp_97_20260127.en.jsonl",
+            "name": "ShoppingComp EN",
+            "description": "ShoppingComp benchmark — 97 English cases with expert-annotated golden data",
+        },
+        {
+            "path": sc_dir / "ShoppingComp_97_20260127.zh.jsonl",
+            "name": "ShoppingComp ZH",
+            "description": "ShoppingComp benchmark — 97 Chinese cases with expert-annotated golden data",
+        },
+        {
+            "path": sc_dir / "ShoppingComp_traps_48_20260127.en.jsonl",
+            "name": "ShoppingComp Traps EN",
+            "description": "ShoppingComp trap cases — 48 English adversarial queries",
+        },
+        {
+            "path": sc_dir / "ShoppingComp_traps_48_20260127.zh.jsonl",
+            "name": "ShoppingComp Traps ZH",
+            "description": "ShoppingComp trap cases — 48 Chinese adversarial queries",
+        },
+    ]
+
+    results = []
+    for f in files:
+        if not f["path"].exists():
+            results.append({"name": f["name"], "error": f"File not found: {f['path']}"})
+            continue
+        try:
+            r = await import_shoppingcomp(f["path"], f["name"], f["description"])
+            results.append({
+                "name": f["name"],
+                "dataset_id": r.dataset_id,
+                "imported": r.imported,
+                "skipped": r.skipped,
+                "types": r.types,
+                "categories": r.categories,
+            })
+        except Exception as e:
+            results.append({"name": f["name"], "error": str(e)})
+
+    total_imported = sum(r.get("imported", 0) for r in results)
+    return {"results": results, "total_imported": total_imported}

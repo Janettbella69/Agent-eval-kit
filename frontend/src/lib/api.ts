@@ -19,6 +19,10 @@ export const listDatasets = () => fetchJSON<Dataset[]>('/datasets')
 export const getDataset = (id: number) => fetchJSON<Dataset & { cases: Case[] }>(`/datasets/${id}`)
 export const importDataset = (name: string) =>
   fetchJSON<{ dataset_id: number; cases_imported: number }>(`/datasets/import?name=${name}`, { method: 'POST' })
+export const importShoppingCompAll = () =>
+  fetchJSON<{ results: Array<{ name: string; dataset_id?: number; imported?: number; categories?: Record<string, number>; error?: string }>; total_imported: number }>(
+    '/datasets/import-shoppingcomp-all', { method: 'POST' }
+  )
 export const updateDataset = (id: number, body: Record<string, unknown>) =>
   fetchJSON<{ ok: boolean }>(`/datasets/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const getDatasetSaturation = (id: number) =>
