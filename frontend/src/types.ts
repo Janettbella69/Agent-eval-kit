@@ -324,4 +324,7 @@ export interface WsMessage {
   error?: string
   reason?: string
   consecutive_errors?: number
+  graded_count?: number
+  avg_score?: number
+  pass_rate?: number
 }

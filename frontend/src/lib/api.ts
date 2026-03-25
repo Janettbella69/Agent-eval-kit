@@ -90,6 +90,34 @@ export const annotateHumanPass = (traceId: number, passed: boolean) =>
 // Judge Alignment
 export const getJudgeAlignment = () => fetchJSON<JudgeAlignment>('/traces/alignment')
 
+// Grader Validation (TPR/TNR calibration)
+export interface GraderValidation {
+  grader_name: string
+  tpr: number | null
+  tnr: number | null
+  tp: number; fp: number; tn: number; fn: number
+  n_samples: number
+  threshold_met: boolean
+  observed_pass_rate?: number
+  corrected_pass_rate?: number | null
+  error?: string
+}
+export interface ValidationSummary {
+  [graderName: string]: {
+    tpr: number | null
+    tnr: number | null
+    n_samples: number
+    threshold_met: boolean
+    last_validated: number | null
+  }
+}
+export const validateGrader = (name: string) =>
+  fetchJSON<GraderValidation>(`/graders/${name}/validate`, { method: 'POST' })
+export const getValidationSummary = () =>
+  fetchJSON<ValidationSummary>('/graders/validation-summary')
+export const getGraderDefinitions = () =>
+  fetchJSON<Array<{ name: string; weight: number; category: string; requires_golden: boolean }>>('/graders/definitions')
+
 // Open Codes (qualitative labels)
 export const updateOpenCodes = (traceId: number, add: string[] = [], remove: string[] = []) =>
   fetchJSON<{ ok: boolean; open_codes: string[] }>(`/traces/${traceId}/codes`, {

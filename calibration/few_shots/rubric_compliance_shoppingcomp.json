@@ -1,0 +1,22 @@
+[
+  {
+    "verdict": "PASS",
+    "input_summary": "Golden: Sony Alpha 6700. Expert says: 4K 4:2:2 10-bit, 493g body weight (meets <=500g), AF rated EV-3 (note: falls short of rubric's EV-4), IBIS 5-axis, continuous recording ~30min with overheating.",
+    "reasoning": "Agent recommended Sony Alpha 6700 as top pick. Guide states '4K 4:2:2 10-bit internal recording' (matches expert), '493g body only' (matches expert), and explicitly notes 'AF sensitivity rated to EV-3, slightly below the EV-4 in our criteria'. Overheating limitation mentioned. Key specs match expert ground truth, and limitation (AF EV-3 vs EV-4) was honestly disclosed."
+  },
+  {
+    "verdict": "PASS",
+    "input_summary": "Golden: Electrolux ELFW7637AT. Expert says: 4.5 cu ft capacity, StainSoak cycle, LuxCare Plus wash system, steam option, Energy Star, 47 dB noise.",
+    "reasoning": "Agent recommended Electrolux ELFW7637AT correctly. Guide mentions '4.5 cubic feet' (matches), 'steam cycle for tough stains' (directionally correct but imprecise — StainSoak not named). Noise '48 dB' (expert: 47 dB — close). Energy Star mentioned. LuxCare Plus name not referenced. Product found, mostly accurate, minor imprecision acceptable."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Golden: HONOR Magic6 Pro. Expert says: IP68, Snapdragon 8 Gen 3, 5600mAh silicon-carbon battery, satellite messaging, -30C cold resistance.",
+    "reasoning": "Agent recommended Samsung Galaxy S24 Ultra and iPhone 15 Pro Max instead of HONOR Magic6 Pro. Golden product not found. No discussion of silicon-carbon battery tech or cold resistance specs. Agent defaulted to mainstream Western brands rather than discovering the product matching trekking requirements."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Golden: Little Swan TG100V88WMUIADY5. Expert says: 10kg, direct-drive motor, Silver Ion antibacterial, 48dB, A+++ energy, child lock.",
+    "reasoning": "Agent did not find Little Swan brand at all. Recommended LG and Samsung — valid machines but not the golden product. Missing: Silver Ion antibacterial tech, direct-drive motor that distinguish the golden product. Known issue with non-Western brands in English search, but rubric required this product."
+  }
+]

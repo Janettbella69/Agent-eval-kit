@@ -1,0 +1,22 @@
+[
+  {
+    "verdict": "PASS",
+    "input_summary": "Guide recommends 4 noise-cancelling headphones with comparison table.",
+    "reasoning": "Products with prices: 4/4 (Sony $348, Bose $379, AirPods Max $449, Sennheiser $299). Products with buy links: 3/4 (Amazon links for 3, Best Buy for 1). Has audience segmentation: yes ('Best overall: Sony; Best for Apple users: AirPods Max; Best value: Sennheiser'). Comparison table with ANC, battery, weight. User can click and buy immediately."
+  },
+  {
+    "verdict": "PASS",
+    "input_summary": "Guide recommends 5 running shoes with prices.",
+    "reasoning": "Products with prices: 4/5 ($120-$180 range). Products with buy links: 2/5 (Nike.com and Amazon). Others say 'available at Dick's Sporting Goods and REI' — specific retailers but no URLs. Has audience segmentation: yes ('For flat feet: Brooks; For speed: Nike Vaporfly'). Missing: no size availability info. Mostly actionable — 80% priced, specific retailer names provided."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Guide discusses 6 robot vacuums in detail.",
+    "reasoning": "Products with prices: 2/6. Products with buy links: 0/6. Has audience segmentation: no. Guide ends with 'Check current prices on Amazon or your preferred retailer' — generic cop-out. User would need to separately search for each product."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Guide about best laptops for students, mentions 8 products.",
+    "reasoning": "Products with prices: 0/8 — every product says 'check current pricing'. Products with buy links: 0/8. Has audience segmentation: no. Guide reads like a feature comparison article, not a buying guide. User has no idea if products fit their budget."
+  }
+]

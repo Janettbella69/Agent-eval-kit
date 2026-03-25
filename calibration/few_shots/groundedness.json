@@ -1,0 +1,22 @@
+[
+  {
+    "verdict": "PASS",
+    "input_summary": "Guide about wireless earbuds. 18 sources cited including RTINGS, SoundGuys, Amazon, Best Buy.",
+    "reasoning": "Claims checked: 15. Claims grounded: 13. 'Sony WF-1000XM5 battery: 8 hours with ANC' — cited [[RTINGS]], matches measurement page. '$279 at Amazon' — matches product listing. 'IP rating IPX4' — cited [[SoundGuys]], confirmed. 2 unverified: 'most comfortable fit in class' (subjective, acceptable) and 'case charges in 1.5 hours' (no source, but not critical). No fabricated critical claims."
+  },
+  {
+    "verdict": "PASS",
+    "input_summary": "Guide about 4K monitors for photo editing. 12 sources cited.",
+    "reasoning": "Claims checked: 12. Claims grounded: 9. '$1299 at B&H Photo' — matches source. 'Delta E < 2 out of box' — cited [[RTINGS]], confirmed. 'USB-C 96W PD' — cited [[Notebookcheck]], confirmed. 3 unverified: 'panel uniformity 92%' (no source), 'sRGB 100% coverage' (source says 99.8% — close), '1200:1 contrast' (source says 1100:1 — slightly inflated). Minor accuracy gaps but no critical fabrication."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Guide about gaming chairs. 8 sources cited, mostly manufacturer websites.",
+    "reasoning": "Claims checked: 14. Claims grounded: 5. '$349 on Amazon' — no Amazon source cited, price unverifiable. '4D armrests with 8cm vertical travel' — manufacturer spec, no independent verification. 'Rated for 330 lbs' — source says 300 lbs (inflated by 30 lbs). 'Memory foam density 55 kg/m3' — no source, appears fabricated. Critical fabrications: weight capacity and foam density specs."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Guide about air purifiers for allergies. 4 sources cited.",
+    "reasoning": "Claims checked: 12. Claims grounded: 3. 'CADR 400 cfm' — product spec says 350 cfm (fabricated higher). 'HEPA 13 filter' — actual product has HEPA 11 (wrong grade, safety-critical for allergy users). '$199 at Target' — actual price $249. 'Covers 1500 sq ft' — actual 900 sq ft. Critical fabrications: HEPA grade, CADR, coverage area, and price."
+  }
+]

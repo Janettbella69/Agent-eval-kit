@@ -1,11 +1,11 @@
-"""Experiment executor: two-phase collect → grade pipeline with circuit breaker.
+"""Experiment executor: streaming collect→grade pipeline with circuit breaker.
 
-Phase 1 (Collect): Run cases through product backend, save raw traces
-Phase 2 (Grade): Run grading pipeline on collected traces, save scores
-Phase 3 (Aggregate): Compute experiment summary with pass@k metrics
+Architecture: collect workers → asyncio.Queue → grade workers (overlapping phases)
+Grade workers start consuming immediately as traces are collected, reducing total time.
 """
 
 import asyncio
+import logging
 import time
 
 from runner.collector import collect_sse, CollectedResult
@@ -13,8 +13,11 @@ from graders.pipeline import grade_trace as grade_trace_pipeline
 from storage import queries
 from runner.progress import get_manager
 
+logger = logging.getLogger(__name__)
+
 MAX_AUTO_CLARIFICATIONS = 2
 CIRCUIT_BREAKER_THRESHOLD = 3  # consecutive errors → auto-pause
+INCREMENTAL_SUMMARY_INTERVAL = 5  # broadcast summary every N graded traces
 
 
 def _pick_clarification_answer(clarification: dict) -> str:
@@ -95,6 +98,24 @@ def _result_to_trace_data(result: CollectedResult, case: dict, trial_num: int) -
     }
 
 
+def _grades_to_trace_update(grades: dict) -> dict:
+    """Convert grading pipeline output to trace update kwargs."""
+    return {
+        "status": "done",
+        "l0_scores": grades.get("l0", {}),
+        "l1_scores": grades.get("l1", {}).get("breakdown", {}),
+        "l2_scores": grades.get("l2"),
+        "final_score": grades.get("final_score", 0),
+        "final_pass": int(grades.get("final_pass", False)),
+        "composite_scores": grades.get("composite_scores", {}),
+        "failure_funnel": grades.get("failure_funnel", {}),
+        "error_types": grades.get("error_types", []),
+        "grading_duration_s": grades.get("grading_duration_s", 0),
+        "grading_log": grades.get("grading_log", []),
+        "judge_prompt_version": grades.get("judge_prompt_version", ""),
+    }
+
+
 async def _grade_single_trace(trace: queries.Trace, case: dict) -> dict:
     """Run grading pipeline on a collected trace.
 
@@ -132,24 +153,35 @@ async def run_experiment(
     cases: list[dict],
     concurrency: int = 1,
     trials: int = 1,
+    grade_concurrency: int = 2,
 ):
-    """Run all cases for an experiment: Phase 1 (collect) → Phase 2 (grade) → Phase 3 (aggregate).
+    """Run all cases: streaming collect→grade pipeline with overlapping phases.
+
+    Architecture:
+      collect_workers (Semaphore) → grade_queue → grade_workers (Semaphore)
+      Grade workers start consuming immediately as traces are collected.
 
     Updates DB traces and broadcasts progress via WebSocket.
     """
     _cancel_flags[experiment_id] = False
     manager = get_manager()
-    sem = asyncio.Semaphore(concurrency)
+    collect_sem = asyncio.Semaphore(concurrency)
 
     await queries.update_experiment_status(experiment_id, "running")
     total = len(cases) * trials
     manager.broadcast(experiment_id, {"type": "experiment_start", "total": total})
 
-    # ── Phase 1: Collect ──
-    collected_trace_ids: list[int] = []
-    consecutive_errors = 0
+    # ── Shared state ──
     case_map: dict[str, dict] = {c["key"]: c for c in cases}
+    consecutive_errors = 0
+    graded_count = 0
+    graded_scores: list[float] = []
+    graded_passes: list[bool] = []
 
+    # ── Grade Queue: bridge between collect and grade phases ──
+    grade_queue: asyncio.Queue[int | None] = asyncio.Queue()
+
+    # ── Collect Worker ──
     async def collect_one(case: dict, trial_num: int):
         nonlocal consecutive_errors
 
@@ -167,13 +199,12 @@ async def run_experiment(
         })
 
         try:
-            async with sem:
+            async with collect_sem:
                 result = await collect_single_case(case, trial_num)
 
             trace_data = _result_to_trace_data(result, case, trial_num)
             await queries.update_trace(trace_id, **trace_data)
-            collected_trace_ids.append(trace_id)
-            consecutive_errors = 0  # Reset on success
+            consecutive_errors = 0
 
             manager.broadcast(experiment_id, {
                 "type": "case_collected",
@@ -182,6 +213,9 @@ async def run_experiment(
                 "trace_id": trace_id,
                 "duration_s": result.duration_s,
             })
+
+            # Enqueue for grading immediately
+            await grade_queue.put(trace_id)
 
         except Exception as e:
             await queries.update_trace(trace_id, **{
@@ -211,6 +245,73 @@ async def run_experiment(
                 })
                 _cancel_flags[experiment_id] = True
 
+    # ── Grade Worker ──
+    async def grade_worker():
+        nonlocal graded_count
+
+        while True:
+            trace_id = await grade_queue.get()
+            if trace_id is None:  # Sentinel: no more work
+                grade_queue.task_done()
+                break
+
+            trace = await queries.get_trace(trace_id)
+            if not trace or trace.status == "error":
+                grade_queue.task_done()
+                continue
+
+            case = case_map.get(trace.case_key, {
+                "key": trace.case_key, "query": trace.query,
+                "type": trace.case_type, "constraints": {}, "golden_data": {},
+            })
+
+            manager.broadcast(experiment_id, {
+                "type": "case_grading",
+                "case_key": trace.case_key,
+                "trial_num": trace.trial_num,
+                "trace_id": trace_id,
+            })
+
+            try:
+                grades = await _grade_single_trace(trace, case)
+                await queries.update_trace(trace_id, **_grades_to_trace_update(grades))
+
+                score = grades.get("final_score", 0)
+                passed = bool(grades.get("final_pass"))
+                graded_count += 1
+                graded_scores.append(score)
+                graded_passes.append(passed)
+
+                manager.broadcast(experiment_id, {
+                    "type": "case_graded",
+                    "case_key": trace.case_key,
+                    "trial_num": trace.trial_num,
+                    "trace_id": trace_id,
+                    "score": score,
+                    "passed": passed,
+                })
+
+                # Incremental summary
+                if graded_count % INCREMENTAL_SUMMARY_INTERVAL == 0:
+                    avg = sum(graded_scores) / len(graded_scores) if graded_scores else 0
+                    pr = sum(graded_passes) / len(graded_passes) if graded_passes else 0
+                    manager.broadcast(experiment_id, {
+                        "type": "incremental_summary",
+                        "graded_count": graded_count,
+                        "avg_score": round(avg, 1),
+                        "pass_rate": round(pr * 100, 1),
+                    })
+
+            except Exception as e:
+                logger.error(f"Grading error for trace {trace_id}: {e}")
+                await queries.update_trace(trace_id, status="done", final_score=0, final_pass=0)
+
+            grade_queue.task_done()
+
+    # ── Start grade workers FIRST (they block on empty queue) ──
+    grade_workers = [asyncio.create_task(grade_worker()) for _ in range(grade_concurrency)]
+
+    # ── Start all collect tasks ──
     collect_tasks = []
     for case in cases:
         for trial in range(1, trials + 1):
@@ -218,56 +319,14 @@ async def run_experiment(
 
     await asyncio.gather(*collect_tasks, return_exceptions=True)
 
-    # Check if circuit breaker was triggered
-    if _cancel_flags.get(experiment_id):
-        # Still grade whatever was collected
-        pass
+    # ── Signal grade workers to stop ──
+    for _ in range(grade_concurrency):
+        await grade_queue.put(None)
 
-    # ── Phase 2: Grade ──
-    if collected_trace_ids:
-        manager.broadcast(experiment_id, {
-            "type": "grading_start",
-            "total": len(collected_trace_ids),
-        })
+    # ── Wait for all grading to complete ──
+    await asyncio.gather(*grade_workers)
 
-        for trace_id in collected_trace_ids:
-            trace = await queries.get_trace(trace_id)
-            if not trace or trace.status == "error":
-                continue
-
-            case = case_map.get(trace.case_key, {"key": trace.case_key, "query": trace.query,
-                                                  "type": trace.case_type, "constraints": {}, "golden_data": {}})
-
-            try:
-                grades = await _grade_single_trace(trace, case)
-                await queries.update_trace(trace_id, **{
-                    "status": "done",
-                    "l0_scores": grades.get("l0", {}),
-                    "l1_scores": grades.get("l1", {}).get("breakdown", {}),
-                    "l2_scores": grades.get("l2"),
-                    "final_score": grades.get("final_score", 0),
-                    "final_pass": int(grades.get("final_pass", False)),
-                    "composite_scores": grades.get("composite_scores", {}),
-                    "failure_funnel": grades.get("failure_funnel", {}),
-                    "error_types": grades.get("error_types", []),
-                    "grading_duration_s": grades.get("grading_duration_s", 0),
-                    "grading_log": grades.get("grading_log", []),
-                    "judge_prompt_version": grades.get("judge_prompt_version", ""),
-                })
-
-                manager.broadcast(experiment_id, {
-                    "type": "case_graded",
-                    "case_key": trace.case_key,
-                    "trial_num": trace.trial_num,
-                    "trace_id": trace_id,
-                    "score": grades.get("final_score", 0),
-                    "passed": bool(grades.get("final_pass")),
-                })
-            except Exception:
-                # Grading error — mark trace with what we have
-                await queries.update_trace(trace_id, status="done", final_score=0, final_pass=0)
-
-    # ── Phase 3: Aggregate ──
+    # ── Phase 3: Final Aggregate ──
     summary = await queries.compute_experiment_summary(experiment_id)
 
     status = "complete"
@@ -309,20 +368,7 @@ async def regrade_experiment(experiment_id: int) -> int:
                                               "type": trace.case_type, "constraints": {}, "golden_data": {}})
         try:
             grades = await _grade_single_trace(trace, case)
-            await queries.update_trace(trace.id, **{
-                "status": "done",
-                "l0_scores": grades.get("l0", {}),
-                "l1_scores": grades.get("l1", {}).get("breakdown", {}),
-                "l2_scores": grades.get("l2"),
-                "final_score": grades.get("final_score", 0),
-                "final_pass": int(grades.get("final_pass", False)),
-                "composite_scores": grades.get("composite_scores", {}),
-                "failure_funnel": grades.get("failure_funnel", {}),
-                "error_types": grades.get("error_types", []),
-                "grading_duration_s": grades.get("grading_duration_s", 0),
-                "grading_log": grades.get("grading_log", []),
-                "judge_prompt_version": grades.get("judge_prompt_version", ""),
-            })
+            await queries.update_trace(trace.id, **_grades_to_trace_update(grades))
             count += 1
         except Exception:
             continue

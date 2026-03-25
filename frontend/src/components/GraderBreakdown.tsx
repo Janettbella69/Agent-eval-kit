@@ -77,9 +77,18 @@ function CompositeView({
                 <div className="flex-1">
                   <ScoreBar score={g.score} maxScore={100} size="sm" showLabel={false} />
                 </div>
-                <span className="w-10 text-right text-xs tabular-nums font-medium text-slate-700">
-                  {g.score.toFixed(0)}
-                </span>
+                {g.category === 'llm' && g.details?.verdict ? (
+                  <span className={`w-10 text-right text-xs font-bold ${
+                    (g.details.verdict as string).toLowerCase() === 'pass'
+                      ? 'text-emerald-600' : 'text-red-600'
+                  }`}>
+                    {(g.details.verdict as string).toUpperCase()}
+                  </span>
+                ) : (
+                  <span className="w-10 text-right text-xs tabular-nums font-medium text-slate-700">
+                    {g.score.toFixed(0)}
+                  </span>
+                )}
                 <span className={`w-10 text-right text-[10px] ${
                   g.category === 'llm' ? 'text-purple-500' : 'text-slate-400'
                 }`}>

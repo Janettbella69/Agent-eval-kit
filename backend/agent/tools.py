@@ -28,13 +28,14 @@ def get_scores() -> dict:
 
 @tool(
     "score_grader",
-    "Record your numeric score (0-100) for this evaluation. "
+    "Record your evaluation verdict for this grading dimension. "
+    "Preferred: call with result='Pass' or result='Fail' for binary evaluation. "
     "You can call this multiple times — if self-reflection reveals issues, "
-    "call again with your revised score. The LAST call is your final answer. "
-    "Score 0-100 where 0=completely fails and 100=perfectly meets all criteria.",
+    "call again with your revised verdict. The LAST call is your final answer. "
+    "Include detailed reasoning with specific evidence from the guide.",
     {
         "grader_name": str,
-        "score": float,
+        "result": str,
         "reasoning": str,
     },
 )
@@ -45,14 +46,26 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
         _scores_var.set(scores)
 
     grader_name = args.get("grader_name", "").strip()
-    score = args.get("score", 0)
     reasoning = args.get("reasoning", "")
 
-    # Clamp score to 0-100
-    try:
-        score = max(0, min(100, float(score)))
-    except (TypeError, ValueError):
-        score = 0
+    # Binary result (preferred) → auto-map to score
+    result_raw = str(args.get("result", "")).strip()
+    result = ""
+    if result_raw.lower() in ("pass", "true", "yes"):
+        result = "Pass"
+        score = 100.0
+    elif result_raw.lower() in ("fail", "false", "no"):
+        result = "Fail"
+        score = 0.0
+    else:
+        # Fallback: accept numeric score for backward compat
+        raw_score = args.get("score", args.get("result", 0))
+        try:
+            score = max(0, min(100, float(raw_score)))
+        except (TypeError, ValueError):
+            score = 0.0
+        # Infer result from numeric score
+        result = "Pass" if score >= 70 else "Fail"
 
     # Track revision history — last call wins
     existing = scores.get(grader_name)
@@ -64,20 +77,27 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
         revisions.append({
             "score": existing.get("score", 0),
             "reasoning": existing.get("reasoning", ""),
+            "result": existing.get("result", ""),
         })
 
     scores[grader_name] = {
         "score": score,
+        "result": result,
         "reasoning": reasoning,
         "revision_num": revision_num,
         "revisions": revisions,
     }
 
-    response: dict[str, Any] = {"status": "recorded", "grader_name": grader_name, "score": score}
+    response: dict[str, Any] = {
+        "status": "recorded",
+        "grader_name": grader_name,
+        "result": result,
+        "score": score,
+    }
     if revision_num > 1:
         response["revised"] = True
         response["revision_num"] = revision_num
-        response["previous_score"] = revisions[-1]["score"]
+        response["previous_result"] = revisions[-1].get("result", "")
     return response
 
 

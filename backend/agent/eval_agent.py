@@ -319,15 +319,15 @@ async def run_eval_grader(
     user_message: str,
     grader_name: str,
 ) -> dict | None:
-    """Run a single LLM grader that returns a 0-100 score.
+    """Run a single LLM grader that returns a binary Pass/Fail verdict.
 
-    The agent calls score_grader(grader_name, score, reasoning) exactly once.
+    The agent calls score_grader(grader_name, result="Pass"/"Fail", reasoning).
 
     In preset mode, the grader's system_prompt becomes the "append" portion of the
     Claude Code preset — giving the grader full capabilities to verify claims.
 
     Returns:
-        {"score": float, "reasoning": str, "details": {}} or None on failure.
+        {"score": float, "result": str, "reasoning": str, ...} or None on failure.
     """
     init_scores()
 
@@ -361,6 +361,7 @@ async def run_eval_grader(
 
     return {
         "score": grader_data.get("score", 0),
+        "result": grader_data.get("result", ""),
         "reasoning": grader_data.get("reasoning", ""),
         "details": {},
         "revision_num": grader_data.get("revision_num", 1),

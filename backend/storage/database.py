@@ -102,6 +102,24 @@ _MIGRATIONS = [
     "ALTER TABLE traces ADD COLUMN review_status TEXT DEFAULT 'pending'",
     "ALTER TABLE traces ADD COLUMN reviewed_at REAL",
     "ALTER TABLE traces ADD COLUMN review_notes TEXT DEFAULT ''",
+    # Dataset versioning: auto-increment on case changes
+    "ALTER TABLE datasets ADD COLUMN version INTEGER DEFAULT 1",
+    # Experiment → dataset version snapshot (which version was tested)
+    "ALTER TABLE experiments ADD COLUMN dataset_version INTEGER DEFAULT 0",
+    # Grader validation history (TPR/TNR per judge prompt version)
+    """CREATE TABLE IF NOT EXISTS grader_validations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grader_name TEXT NOT NULL,
+        tpr REAL,
+        tnr REAL,
+        tp INTEGER DEFAULT 0,
+        fp INTEGER DEFAULT 0,
+        tn INTEGER DEFAULT 0,
+        fn INTEGER DEFAULT 0,
+        n_samples INTEGER DEFAULT 0,
+        threshold_met INTEGER DEFAULT 0,
+        created_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
+    )""",
 ]
 
 

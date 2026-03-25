@@ -1,0 +1,22 @@
+[
+  {
+    "verdict": "PASS",
+    "input_summary": "Query: best OLED TV for gaming. Rubric requires: input lag <10ms, HDR brightness 800+ nits, 120Hz VRR, burn-in discussion.",
+    "reasoning": "Guide covers 4 TVs with input lag numbers (LG C4: 5.2ms, Samsung S95D: 6.1ms), HDR brightness (C4: 850 nits peak), confirms 120Hz VRR support for all, and has dedicated 'Burn-in Reality Check' section citing RTINGS long-term test. Rubric requirements addressed: 4/4. Missed VRR type distinction (G-Sync vs FreeSync) which rubric didn't explicitly require — not penalized."
+  },
+  {
+    "verdict": "PASS",
+    "input_summary": "Query: family washing machine for 5 people. 7 scenes covering stain removal, capacity 10kg+, energy efficiency, noise, child lock, quick wash, smart features.",
+    "reasoning": "Guide recommends 3 machines with detailed specs: Little Swan TG100V (10kg, A+++ energy, 48dB noise, child lock confirmed), Electrolux ELFW7637 (4.5 cu ft, StainSoak cycle). Comparison table covers all 7 rubric scenes. Specific stain removal tech cited (Silver Ion sterilization, Steam+). Rubric requirements addressed: 7/7 with evidence."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Query: camera for adventure travel blogging. Rubric requires: 4K video, weather sealing IP rating, 2-hour continuous recording, live stream capability, battery specs.",
+    "reasoning": "Guide recommends GoPro Hero 12 and DJI Pocket 3 but lacks key rubric coverage. Claims are vague: 'great video quality' without resolution/bitrate specs, no IP ratings mentioned, no battery duration numbers. Live streaming capability not discussed. Rubric requirements addressed: 1/5 (mentions 4K but no bitrate). Critical specs missing."
+  },
+  {
+    "verdict": "FAIL",
+    "input_summary": "Query: mountain trekking phone. Rubric requires: IP68, satellite communication, 5000mAh+ battery, sub-zero operation, barometric altimeter.",
+    "reasoning": "Guide lists 5 mainstream phones with no ruggedness focus. No IP ratings beyond generic 'water resistant'. Satellite communication not mentioned. Battery specs listed but no cold-weather data. Barometric altimeter not discussed. Rubric requirements addressed: 0/5. Guide reads like a generic phone comparison, not trekking-specific."
+  }
+]

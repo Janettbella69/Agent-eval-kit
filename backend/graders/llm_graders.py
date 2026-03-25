@@ -29,9 +29,10 @@ from runner.collector import CollectedResult
 logger = logging.getLogger(__name__)
 
 # Max chars for guide text and operation log in LLM grader prompts.
-# Prevents token overflow with long ShoppingComp rubrics + guide + operation log.
-_MAX_GUIDE_CHARS = 6000
-_MAX_OPLOG_CHARS = 2000
+# 12K guide ≈ 3K tokens — enough to capture comparison tables and summary sections
+# that were lost at 6K. Total prompt stays under 8K tokens with golden data + oplog.
+_MAX_GUIDE_CHARS = 12000
+_MAX_OPLOG_CHARS = 4000
 
 # Calibration few-shots directory — loaded from train set via extract_few_shots.py
 _CALIBRATION_DIR = Path(__file__).resolve().parent.parent.parent / "calibration" / "few_shots"
@@ -49,10 +50,9 @@ def _load_few_shots(grader_name: str) -> str:
         lines = []
         for ex in examples:
             verdict = ex.get("verdict", "PASS" if ex.get("score", 0) >= 70 else "FAIL")
-            score = ex.get("score", 0)
             reasoning = ex.get("reasoning", "")
             input_summary = ex.get("input_summary", "")
-            lines.append(f'<example verdict="{verdict}" score="{score}">')
+            lines.append(f'<example verdict="{verdict}">')
             if input_summary:
                 lines.append(f"Input: {input_summary}")
             lines.append(f"Reasoning: {reasoning}")
@@ -289,9 +289,11 @@ async def _run_llm_grader(
             return None
 
         score = result.get("score", 0)
+        verdict = result.get("result", "")
         reasoning = result.get("reasoning", "")
         details = result.get("details", {})
         details["reasoning"] = reasoning
+        details["verdict"] = verdict  # Binary Pass/Fail verdict
         details["system_prompt"] = system_prompt  # For judge prompt traceability
         details["num_turns"] = result.get("num_turns", 0)
 
@@ -351,13 +353,13 @@ async def _grade_rubric_compliance_shoppingcomp(
 
     calibrated_examples = _load_few_shots("rubric_compliance_shoppingcomp")
     if not calibrated_examples:
-        calibrated_examples = """<example verdict="PASS" score="85">
+        calibrated_examples = """<example verdict="PASS">
 Input: Golden product Sony Alpha 6700. Expert says: weight 493g (meets ≤500g), 4K 10-bit, but AF only EV-3 (falls short of required EV-4).
 Agent recommended Sony Alpha 6700. Guide says: "493g body", "4K 4:2:2 10-bit", mentions "AF rated to EV-3, slightly below the EV-4 spec" as a limitation.
-Reasoning: Agent found correct product, got key specs right, and disclosed the EV-3 limitation noted in expert analysis. Minor gap: didn't cite Sony spec page directly.
+Reasoning: Agent found correct product, got key specs right, and disclosed the EV-3 limitation noted in expert analysis. Minor gap: didn't cite Sony spec page directly — not enough to fail.
 </example>
 
-<example verdict="FAIL" score="28">
+<example verdict="FAIL">
 Input: Golden product Sony Alpha 6700. Expert says: weight 493g, 4K 10-bit, AF EV-3 (not EV-4).
 Agent recommended Sony ZV-E10. Guide says "excellent low-light" without specs. No mention of weight or AF limitations.
 Reasoning: Wrong product recommended. Claims are vague and unverifiable against expert ground truth. Key limitation (AF shortfall) completely absent.
@@ -366,28 +368,20 @@ Reasoning: Wrong product recommended. Claims are vague and unverifiable against 
     system_prompt = f"""You are an eval judge for a shopping research guide. You have expert-verified ground truth.
 
 ## Task
-Compare the agent's guide against expert-annotated golden products.
-The ground truth contains: correct specs, why each product satisfies/fails rubric requirements, and expected source URLs.
+Compare the agent's guide against expert-annotated golden products. Determine: PASS or FAIL.
 
 ## FAIL Definition
-Agent either: (a) missed all golden products, OR (b) recommended golden products but stated incorrect specs or omitted critical limitations noted in expert analysis.
+Agent either: (a) missed all golden products AND did not recommend clearly superior alternatives, OR (b) recommended golden products but stated incorrect specs or omitted critical limitations noted in expert analysis.
 
 ## PASS Definition
-Agent recommended at least one golden product AND claims are consistent with expert verification — correct key specs, key limitations disclosed.
+Agent recommended at least one golden product (or a clearly equivalent/superior alternative) AND claims are consistent with expert verification — correct key specs, key limitations disclosed.
 
 ## Output Format
-Call `score_grader` with: grader_name="rubric_compliance", score (0-100), reasoning.
-Reasoning must state: which golden products found, spec accuracy vs expert, limitations disclosed/missed.
+Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
+Reasoning MUST state: (1) which golden products found or missed, (2) spec accuracy vs expert, (3) limitations disclosed or missed.
 
 ## Examples
-{calibrated_examples}
-
-## Scoring Guide
-- 90-100: Correct products, spec claims match expert analysis, key limitations disclosed
-- 70-89: Correct products, mostly accurate, minor omissions
-- 50-69: Correct products found, but significant spec errors or missing limitations
-- 30-49: Wrong products or mostly incorrect specs
-- 0-29: No golden products found"""
+{calibrated_examples}"""
 
     user_message = f"""{golden_context}
 
@@ -400,7 +394,7 @@ Reasoning must state: which golden products found, spec accuracy vs expert, limi
 ---
 Compare the agent's output against the ground truth above.
 Check: (1) were golden products recommended? (2) are spec claims accurate per expert verification? (3) were key limitations disclosed?
-Call score_grader with your assessment."""
+Determine Pass or Fail. Call score_grader with your verdict."""
 
     r = await _run_llm_grader(system_prompt, user_message, "rubric_compliance", 0.15)
     if r is None:
@@ -429,20 +423,20 @@ async def _grade_rubric_compliance_rubric_only(
     # Load calibrated few-shots if available, otherwise use defaults
     calibrated_examples = _load_few_shots("rubric_compliance")
     if not calibrated_examples:
-        calibrated_examples = """<example verdict="PASS" score="82">
+        calibrated_examples = """<example verdict="PASS">
 Input: Rubric requires OLED vs LED comparison with input lag, HDR brightness, burn-in risk.
-Reasoning: Guide covers OLED vs LED with input lag numbers (0.5ms vs 2ms), HDR brightness (800 vs 1500 nits), dedicated burn-in section. Missing VRR/HDMI 2.1 not in rubric — not penalized.
+Reasoning: Guide covers OLED vs LED with input lag numbers (0.5ms vs 2ms), HDR brightness (800 vs 1500 nits), dedicated burn-in section. Missing VRR/HDMI 2.1 not in rubric — not penalized. 3/3 core rubric requirements addressed with evidence.
 </example>
 
-<example verdict="FAIL" score="40">
+<example verdict="FAIL">
 Input: Rubric requires OLED vs LED comparison with input lag, HDR brightness, burn-in risk.
-Reasoning: Guide says "OLED TVs are great for gaming. LED TVs are more affordable." No specs, no numerical data, no substantive comparison. Rubric requirements largely unaddressed.
+Reasoning: Guide says "OLED TVs are great for gaming. LED TVs are more affordable." No specs, no numerical data, no substantive comparison. 0/3 rubric requirements addressed with evidence.
 </example>"""
 
     system_prompt = f"""You are an eval judge for a shopping research guide.
 
 ## Task
-Evaluate the guide against specific scene rubrics. Score each scene, then compute an average.
+Evaluate the guide against specific scene rubrics. Determine: PASS or FAIL.
 
 ## FAIL Definition
 Guide misses >30% of rubric requirements, OR addresses them only superficially without specific evidence (numbers, specs, comparisons).
@@ -451,18 +445,11 @@ Guide misses >30% of rubric requirements, OR addresses them only superficially w
 Guide addresses 70%+ of scene rubric requirements with specific evidence (product names, specs, measurements, source citations).
 
 ## Output Format
-Call `score_grader` with: grader_name="rubric_compliance", score (0-100), reasoning.
-Reasoning must list which rubric items are covered vs missing.
+Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
+Reasoning MUST list: (1) total rubric requirements, (2) how many addressed with evidence, (3) which are missing.
 
 ## Examples
-{calibrated_examples}
-
-## Scoring Guide
-- 90-100: All rubric requirements clearly addressed with specific evidence
-- 70-89: Most requirements addressed, minor gaps
-- 50-69: Some requirements addressed but significant gaps
-- 30-49: Few requirements addressed
-- 0-29: Rubric largely ignored"""
+{calibrated_examples}"""
 
     user_message = f"""## Scenes and Rubrics
 {scene_block}
@@ -471,7 +458,7 @@ Reasoning must list which rubric items are covered vs missing.
 {result.guide_text[:_MAX_GUIDE_CHARS]}
 
 ---
-Evaluate guide compliance against each scene rubric. Score based on what is in the output."""
+Evaluate guide compliance against each scene rubric. Determine Pass or Fail based on evidence coverage."""
 
     r = await _run_llm_grader(system_prompt, user_message, "rubric_compliance", 0.15)
     if r is None:
@@ -491,40 +478,33 @@ async def grade_trap_detection(result: CollectedResult, golden_data: dict) -> Gr
 
     calibrated_examples = _load_few_shots("trap_detection")
     if not calibrated_examples:
-        calibrated_examples = """<example verdict="PASS" score="92">
+        calibrated_examples = """<example verdict="PASS">
 Input: Trap — "Product X was recalled due to battery fire risk in 2024"
-Reasoning: Guide explicitly warns "⚠️ Product X was recalled in late 2024 due to battery overheating" and offers alternatives Y and Z. Risk clearly identified with consequences.
+Reasoning: Guide explicitly warns "⚠️ Product X was recalled in late 2024 due to battery overheating" and offers alternatives Y and Z. Risk clearly identified with consequences. A reader would definitely notice this warning.
 </example>
 
-<example verdict="FAIL" score="15">
+<example verdict="FAIL">
 Input: Trap — "Product X was recalled due to battery fire risk in 2024"
-Reasoning: Guide recommends "Product X is our top pick for portability! Great battery life." No mention of recall or fire risk. User would buy a recalled product.
+Reasoning: Guide recommends "Product X is our top pick for portability! Great battery life." No mention of recall or fire risk. User would buy a recalled product without knowing.
 </example>"""
 
     system_prompt = f"""You are an eval judge for trap/risk detection in a shopping guide.
 
 ## Task
-Evaluate whether the guide correctly identifies a hidden trap/risk that the agent should have discovered.
+Evaluate whether the guide correctly identifies a hidden trap/risk. Determine: PASS or FAIL.
 
 ## FAIL Definition
-Guide recommends the product without mentioning the trap, OR only hints vaguely without explicit warning.
+Guide recommends the product without mentioning the trap, OR only hints vaguely without explicit warning that a user would likely miss.
 
 ## PASS Definition
-Guide explicitly identifies the hidden risk/trap AND explains consequences to the user.
+Guide explicitly identifies the hidden risk/trap AND explains consequences to the user. The warning must be clear enough that a reasonable reader would notice it.
 
 ## Output Format
-Call `score_grader` with: grader_name="trap_detection", score (0-100), reasoning.
-Reasoning must state whether the risk was identified and how clearly.
+Call `score_grader` with: grader_name="trap_detection", result="Pass" or result="Fail", reasoning.
+Reasoning MUST state: (1) was the risk mentioned? (2) how explicitly? (3) would a reader notice?
 
 ## Examples
-{calibrated_examples}
-
-## Scoring Guide
-- 90-100: Explicitly identifies the risk, explains consequences, offers alternatives
-- 70-89: Mentions the risk but doesn't fully explain consequences
-- 50-69: Hints at the issue indirectly without clear warning
-- 30-49: Brief mention that could be easily missed
-- 0-29: Completely fails to identify or warn about the risk"""
+{calibrated_examples}"""
 
     user_message = f"""## Hidden Risk (the agent should have discovered this through research)
 {trap_rubric[:500]}
@@ -536,7 +516,7 @@ Reasoning must state whether the risk was identified and how clearly.
 {len(result.products)} products found
 
 ---
-Does the guide warn about this risk? Score based on warning quality in the output."""
+Does the guide warn about this risk? Determine Pass or Fail."""
 
     r = await _run_llm_grader(system_prompt, user_message, "trap_detection", 0.10)
     if r is None:
@@ -561,40 +541,33 @@ async def grade_actionability(result: CollectedResult) -> GraderResult:
 
     calibrated_examples = _load_few_shots("actionability")
     if not calibrated_examples:
-        calibrated_examples = """<example verdict="PASS" score="88">
+        calibrated_examples = """<example verdict="PASS">
 Input: Guide with 4 headphone products.
-Reasoning: 4 products with specific prices ($79, $129, $99, $149), Amazon links for 3/4, clear segmentation "If you prioritize bass, get X; if comfort, get Y". User can act immediately.
+Reasoning: Products with prices: 4/4 ($79, $129, $99, $149). Products with buy links: 3/4 (Amazon). Has audience segmentation: yes ("If you prioritize bass, get X; if comfort, get Y"). User can act immediately.
 </example>
 
-<example verdict="FAIL" score="30">
+<example verdict="FAIL">
 Input: Guide with 5 products mentioned.
-Reasoning: Only 1 of 5 products has a price. No purchase links. Generic "available at major retailers" instead of specific links. User cannot make a purchase decision from this guide.
+Reasoning: Products with prices: 1/5. Products with buy links: 0/5. Has audience segmentation: no. Generic "available at major retailers" instead of specific links. User cannot make a purchase decision.
 </example>"""
 
     system_prompt = f"""You are an eval judge for a shopping research guide's purchase actionability.
 
 ## Task
-Evaluate whether the guide enables the user to make a purchase decision.
+Evaluate whether the guide enables the user to make a purchase decision. Determine: PASS or FAIL.
 
 ## FAIL Definition
-No actionable purchase path — prices missing for most products, links broken or absent, OR only generic "search Amazon" without specifics.
+No actionable purchase path — prices missing for most products (>50%), no purchase links or retailer names, OR only generic "search Amazon" without specifics.
 
 ## PASS Definition
-User can make a purchase decision — at least 2 products have current prices AND where-to-buy info (specific links or retailer names).
+User can make a purchase decision — at least 50% of recommended products have current prices AND where-to-buy info (specific links or retailer names with product identifiers).
 
 ## Output Format
-Call `score_grader` with: grader_name="actionability", score (0-100), reasoning.
-Reasoning must count: how many products have prices? How many have buy links? Is there audience segmentation?
+Call `score_grader` with: grader_name="actionability", result="Pass" or result="Fail", reasoning.
+Reasoning MUST count: (1) products with prices: X/Y, (2) products with buy links: X/Y, (3) has audience segmentation: yes/no.
 
 ## Examples
-{calibrated_examples}
-
-## Scoring Guide
-- 90-100: Clear recommendations, current prices, buy links, good segmentation
-- 70-89: Good recommendations and prices, minor gaps
-- 50-69: Some recommendations but lacks prices or clear buying guidance
-- 30-49: Mostly informational, hard to act on
-- 0-29: No actionable purchase guidance"""
+{calibrated_examples}"""
 
     user_message = f"""## Products Found
 {products_summary}
@@ -603,9 +576,7 @@ Reasoning must count: how many products have prices? How many have buy links? Is
 {result.guide_text[:_MAX_GUIDE_CHARS]}
 
 ---
-Evaluate the guide's purchase actionability based on what appears in the output above.
-Do products have prices? Are there buy links? Are recommendations clear and segmented?
-Call score_grader with your score and reasoning."""
+Evaluate the guide's purchase actionability. Count products with prices and links. Determine Pass or Fail."""
 
     r = await _run_llm_grader(system_prompt, user_message, "actionability", 0.10)
     if r is None:
@@ -638,45 +609,40 @@ async def grade_groundedness(result: CollectedResult) -> GraderResult:
 
     calibrated_examples = _load_few_shots("groundedness")
     if not calibrated_examples:
-        calibrated_examples = """<example verdict="PASS" score="85">
+        calibrated_examples = """<example verdict="PASS">
 Input: Guide about noise-cancelling headphones with 20 sources cited.
-Reasoning: Extracted 20 factual claims. "30-hour battery" cited [[RTINGS]]. "$349 at Best Buy" matches product data. 17/20 grounded. 3 minor claims (weight, color options) unverified but plausible. No fabricated critical claims.
+Reasoning: Extracted 15 factual claims. Claims checked: 15. Claims grounded: 13. "30-hour battery" cited [[RTINGS]] — confirmed. "$349 at Best Buy" — matches product data. 2 unverified: "most comfortable" (subjective, acceptable) and "charges in 1.5h" (no source, but not critical). No fabricated critical claims.
 </example>
 
-<example verdict="FAIL" score="35">
+<example verdict="FAIL">
 Input: Guide about tablets with 5 sources cited.
-Reasoning: Extracted 20 claims. "128GB storage" — actual is 64GB (fabricated spec). "$149 at Amazon" — no source supports this price. 8/20 grounded. Multiple fabricated specs and prices. Critical claims unsupported.
+Reasoning: Extracted 12 factual claims. Claims checked: 12. Claims grounded: 4. "128GB storage" — actual is 64GB (fabricated spec). "$149 at Amazon" — no source supports this price. Critical fabrications: storage capacity and price both wrong. User would make a purchase based on false specs.
 </example>"""
 
     system_prompt = f"""You are a groundedness evaluator for a shopping guide.
 
 ## Task
-Identify factual claims in the guide and check whether each is supported by cited sources.
+Identify factual claims in the guide and check whether each is supported by cited sources. Determine: PASS or FAIL.
+
+Note: You can only verify whether the source LIST contains relevant entries — you cannot access the actual source content. If a claim cites a source that appears in the list and the claim is plausible for that source type, treat it as grounded.
 
 ## FAIL Definition
-<80% of factual claims grounded in cited sources, OR critical claims (price, safety, specs) are fabricated.
+<80% of factual claims grounded in cited sources, OR any critical claim (price, safety spec, compatibility) appears fabricated — contradicted by product data or absent from all sources.
 
 ## PASS Definition
-80%+ of factual claims are grounded — either cited inline with a matching source, or matching product data.
-
-## Output Format
-Call `score_grader` with: grader_name="groundedness", score (0-100), reasoning.
-Reasoning must list: total claims extracted, number grounded, number ungrounded, worst violations.
+80%+ of factual claims are grounded — either cited inline with a matching source, or consistent with product data. Minor unverified claims (subjective opinions, well-known facts) are acceptable.
 
 ## Protocol
 1. Extract 10-15 factual claims (specs, prices, ratings, comparisons — NOT opinions)
 2. For each: check if a cited source or product data supports it
-3. Score = (grounded / total) × 100
+3. If grounded/total >= 0.8 AND no critical fabrications → Pass
+
+## Output Format
+Call `score_grader` with: grader_name="groundedness", result="Pass" or result="Fail", reasoning.
+Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) critical fabrications (if any).
 
 ## Examples
-{calibrated_examples}
-
-## Scoring Guide
-- 90-100: Nearly all claims have clear source support
-- 70-89: Most claims grounded, a few unsupported details
-- 50-69: Significant number of unsupported claims
-- 30-49: Many claims appear fabricated
-- 0-29: Guide appears largely hallucinated"""
+{calibrated_examples}"""
 
     user_message = f"""## Sources Cited ({len(result.sources)})
 {sources_block}
@@ -689,7 +655,7 @@ Reasoning must list: total claims extracted, number grounded, number ungrounded,
 
 ---
 Extract factual claims from the guide. Check each against the source list above.
-Score based on what percentage of claims are supported by cited sources."""
+Determine Pass or Fail based on grounding ratio and critical fabrications."""
 
     r = await _run_llm_grader(system_prompt, user_message, "groundedness", 0.15)
     if r is None:
