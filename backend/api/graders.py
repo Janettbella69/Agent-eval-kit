@@ -34,7 +34,7 @@ async def validate_grader(name: str):
 
     # Store validation result
     from storage import queries
-    db = await queries._get_db()
+    db = await queries.get_db()
     await db.execute(
         """INSERT INTO grader_validations
            (grader_name, tpr, tnr, tp, fp, tn, fn, n_samples, threshold_met, created_at)
@@ -61,7 +61,7 @@ async def validate_grader(name: str):
 async def get_validation_history(name: str, limit: int = 10):
     """Get historical validation results for a grader."""
     from storage import queries
-    db = await queries._get_db()
+    db = await queries.get_db()
     rows = await db.execute_fetchall(
         """SELECT grader_name, tpr, tnr, tp, fp, tn, fn, n_samples,
                   threshold_met, created_at
@@ -89,7 +89,7 @@ async def get_validation_history(name: str, limit: int = 10):
 async def get_validation_summary():
     """Get latest validation status for all LLM graders."""
     from storage import queries
-    db = await queries._get_db()
+    db = await queries.get_db()
 
     llm_graders = [g.name for g in GRADER_DEFS if g.category == "llm"]
     summary = {}

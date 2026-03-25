@@ -90,7 +90,7 @@ async def validate_grader_from_annotations(grader_name: str) -> dict:
     from storage import queries
     import json
 
-    db = await queries._get_db()
+    db = await queries.get_db()
     rows = await db.execute_fetchall(
         """SELECT id, composite_scores, human_scores
            FROM traces
