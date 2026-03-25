@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getTrace, annotateGrader, annotateHumanPass, updateOpenCodes, startTraceAnalysis, getAnalysisResult } from '../lib/api.ts'
+import { getTrace, annotateGrader, annotateHumanPass, updateOpenCodes, startTraceAnalysis, getAnalysisResult, listDatasets, backflowTrace } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
 import GraderBreakdown from '../components/GraderBreakdown.tsx'
 import TraceTimeline from '../components/TraceTimeline.tsx'
@@ -81,6 +81,7 @@ export default function TracePage() {
         <div className="flex flex-col items-end gap-2">
           <ScoreBadge score={trace.final_score} pass={trace.final_pass} size="lg" />
           <HumanPassButton trace={trace} onUpdated={setTrace} />
+          <SaveToDatasetButton trace={trace} />
         </div>
       </div>
 
@@ -1348,6 +1349,83 @@ function RubricTab({ trace }: { trace: Trace }) {
           No rubric data available for this trace.
         </div>
       )}
+    </div>
+  )
+}
+
+
+// ── Save to Dataset (Trace Backflow) ──────────────────────────────────
+
+function SaveToDatasetButton({ trace }: { trace: Trace }) {
+  const [open, setOpen] = useState(false)
+  const [datasets, setDatasets] = useState<Array<{ id: number; name: string }>>([])
+  const [selectedId, setSelectedId] = useState<number>(0)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleOpen = async () => {
+    setOpen(true)
+    const ds = await listDatasets()
+    setDatasets(ds)
+    if (ds.length > 0) setSelectedId(ds[0].id)
+  }
+
+  const handleSave = async () => {
+    if (!selectedId) return
+    setSaving(true)
+    try {
+      await backflowTrace(selectedId, {
+        query: trace.query,
+        guide_text: trace.guide_text,
+        products: trace.products,
+        sources: trace.sources,
+        events: trace.events,
+        hook_metrics: trace.hook_metrics as Record<string, unknown>,
+        trace_id: String(trace.id),
+      })
+      setSaved(true)
+      setTimeout(() => { setOpen(false); setSaved(false) }, 1500)
+    } catch (e) {
+      console.error('Backflow failed:', e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={handleOpen}
+        className="px-2 py-1 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
+      >
+        Save to Dataset
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={selectedId}
+        onChange={e => setSelectedId(Number(e.target.value))}
+        className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-700"
+      >
+        {datasets.map(d => (
+          <option key={d.id} value={d.id}>{d.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={handleSave}
+        disabled={saving || saved}
+        className={`px-2 py-1 rounded text-[10px] font-medium ${
+          saved ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-600 text-white hover:bg-blue-700'
+        } disabled:opacity-50`}
+      >
+        {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}
+      </button>
+      <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-600">
+        Cancel
+      </button>
     </div>
   )
 }

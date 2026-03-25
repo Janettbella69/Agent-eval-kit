@@ -126,6 +126,30 @@ export default function ExperimentPage() {
             </div>
           </div>
 
+          {/* Tracked Metrics (Anthropic: green indicators, not graders) */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 text-center">
+              <div className="text-[10px] text-slate-400 mb-1">Avg Turns</div>
+              <div className="text-lg font-bold text-slate-700 tabular-nums">{s.avg_turns || '—'}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 text-center">
+              <div className="text-[10px] text-slate-400 mb-1">Avg Tokens</div>
+              <div className="text-lg font-bold text-slate-700 tabular-nums">{s.avg_tokens ? Math.round(s.avg_tokens).toLocaleString() : '—'}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 text-center">
+              <div className="text-[10px] text-slate-400 mb-1">Avg Tool Calls</div>
+              <div className="text-lg font-bold text-slate-700 tabular-nums">{s.avg_toolcalls || '—'}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 text-center">
+              <div className="text-[10px] text-slate-400 mb-1">Duration</div>
+              <div className="text-lg font-bold text-slate-700 tabular-nums">{s.avg_duration}s</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 text-center">
+              <div className="text-[10px] text-slate-400 mb-1">Consistency</div>
+              <div className="text-lg font-bold text-slate-700 tabular-nums">{s.consistency_rate ? `${(s.consistency_rate * 100).toFixed(0)}%` : '—'}</div>
+            </div>
+          </div>
+
           {/* pass@k / pass^k metrics */}
           {(s.pass_at_k && Object.keys(s.pass_at_k).length > 1) || (s.pass_pow_k && Object.keys(s.pass_pow_k).length > 1) ? (
             <div className="rounded-xl bg-white border border-slate-200 p-4">

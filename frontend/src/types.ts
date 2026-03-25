@@ -80,6 +80,9 @@ export interface ExperimentSummary {
   avg_score: number
   median_score: number
   avg_duration: number
+  avg_turns: number
+  avg_tokens: number
+  avg_toolcalls: number
   pass_rate: number
   pass_all_rate: number
   consistency_rate: number
