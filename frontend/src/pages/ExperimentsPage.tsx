@@ -111,9 +111,22 @@ function NewExperimentModal({
   const [tag, setTag] = useState('')
   const [concurrency, setConcurrency] = useState(2)
   const [judgeEnabled, setJudgeEnabled] = useState(true)
+  const [model, setModel] = useState('')
+  const [customModel, setCustomModel] = useState('')
+  const [showPromptOverride, setShowPromptOverride] = useState(false)
+  const [systemPrompt, setSystemPrompt] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const MODEL_PRESETS = [
+    { value: '', label: '默认 (env 配置)' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+    { value: 'minimax/minimax-m2.7', label: 'MiniMax M2.7' },
+    { value: 'custom', label: '自定义...' },
+  ]
+
+  const effectiveModel = model === 'custom' ? customModel : model
   const selectedDataset = datasets.find(d => d.id === datasetId)
 
   const handleSubmit = async () => {
@@ -123,12 +136,14 @@ function NewExperimentModal({
     try {
       const { id } = await createExperiment({
         dataset_id: datasetId,
-        tag,
+        tag: tag || (effectiveModel ? `${effectiveModel.split('/').pop()}` : ''),
         trials: 1,
         concurrency,
         judge_enabled: judgeEnabled,
+        model: effectiveModel,
+        system_prompt: systemPrompt,
+        auto_run: true,
       })
-      await runExperiment(id)
       onCreated(id)
     } catch (e) {
       setError(String(e))
@@ -178,6 +193,52 @@ function NewExperimentModal({
             />
           </div>
 
+          {/* Model selector */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">模型</label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            >
+              {MODEL_PRESETS.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+            {model === 'custom' && (
+              <input
+                type="text"
+                value={customModel}
+                onChange={e => setCustomModel(e.target.value)}
+                placeholder="e.g. google/gemini-2.5-flash"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+              />
+            )}
+          </div>
+
+          {/* Prompt override toggle */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowPromptOverride(!showPromptOverride)}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                {showPromptOverride ? 'expand_less' : 'expand_more'}
+              </span>
+              {showPromptOverride ? '收起 Prompt 覆写' : '覆写 System Prompt (可选)'}
+            </button>
+            {showPromptOverride && (
+              <textarea
+                value={systemPrompt}
+                onChange={e => setSystemPrompt(e.target.value)}
+                placeholder="留空使用默认 prompt。填写则完全替换 orchestrator 的 system prompt。"
+                rows={6}
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-300 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-y"
+              />
+            )}
+          </div>
+
           {/* Concurrency + LLM judge row */}
           <div className="flex gap-4">
             <div className="flex-1">
@@ -220,6 +281,18 @@ function NewExperimentModal({
                 <span>并发数</span>
                 <span className="text-slate-700 font-medium">{concurrency}</span>
               </div>
+              {effectiveModel && (
+                <div className="flex justify-between">
+                  <span>模型</span>
+                  <span className="text-slate-700 font-medium">{effectiveModel}</span>
+                </div>
+              )}
+              {systemPrompt && (
+                <div className="flex justify-between">
+                  <span>Prompt</span>
+                  <span className="text-purple-600 font-medium">自定义 ({systemPrompt.length} chars)</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>预计时长</span>
                 <span className="text-slate-700 font-medium">

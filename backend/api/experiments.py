@@ -2,9 +2,11 @@
 
 import asyncio
 import subprocess
+import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from storage import queries
 from storage.models import ExperimentIn
@@ -88,8 +90,24 @@ async def create_experiment(body: ExperimentIn):
         "mode": body.mode,
         "model": model,
         "grading_model": grading_model,
+        "system_prompt": body.system_prompt,
     }
     experiment_id = await queries.create_experiment(body.dataset_id, body.tag, config)
+
+    # Auto-run if requested
+    if body.auto_run:
+        all_cases = await queries.get_cases(body.dataset_id)
+        case_filter = body.cases
+        if case_filter:
+            all_cases = [c for c in all_cases if c.key in case_filter]
+        cases = [{"key": c.key, "query": c.query, "type": c.type,
+                  "constraints": c.constraints, "golden_data": c.golden_data} for c in all_cases]
+        asyncio.create_task(
+            run_experiment(experiment_id, cases, concurrency=body.concurrency,
+                           trials=body.trials, model=model, system_prompt=body.system_prompt)
+        )
+        return {"id": experiment_id, "status": "running", "cases": len(cases)}
+
     return {"id": experiment_id}
 
 
@@ -127,13 +145,16 @@ async def run_experiment_endpoint(experiment_id: int):
 
     trials = experiment.config.get("trials", 1)
     concurrency = experiment.config.get("concurrency", 1)
+    model = experiment.config.get("model", "")
+    system_prompt = experiment.config.get("system_prompt", "")
 
     # Run in background
     asyncio.create_task(
-        run_experiment(experiment_id, cases, concurrency=concurrency, trials=trials)
+        run_experiment(experiment_id, cases, concurrency=concurrency, trials=trials,
+                       model=model, system_prompt=system_prompt)
     )
 
-    return {"status": "started", "cases": len(cases), "trials": trials}
+    return {"status": "started", "cases": len(cases), "trials": trials, "model": model or "(default)"}
 
 
 @router.post("/{experiment_id}/stop")
@@ -167,3 +188,83 @@ async def get_experiment_summary(experiment_id: int):
 
     summary = await queries.compute_experiment_summary(experiment_id)
     return summary.model_dump()
+
+
+# ── Cron / Automation Endpoint ──────────────────────────────
+
+class CronRunRequest(BaseModel):
+    dataset_id: int
+    model: str = ""                 # orchestrator model override
+    system_prompt: str = ""         # prompt override
+    tag_prefix: str = "cron"        # auto-generates tag: cron-2026-03-25-sonnet
+    cases: list[str] | None = None  # subset of case keys; None = all
+    cases_count: int | None = None  # random sample N cases (alternative to explicit list)
+    trials: int = 1
+    concurrency: int = 2
+    judge_enabled: bool = True
+
+
+@router.post("/cron-run")
+async def cron_run_experiment(body: CronRunRequest, request: Request):
+    """Create and auto-run an experiment. Designed for cron/CI/CD automation.
+
+    Secured by X-Eval-Key header (same as product backend eval endpoint).
+
+    Usage:
+        curl -X POST http://localhost:8100/api/experiments/cron-run \\
+          -H "X-Eval-Key: ..." \\
+          -H "Content-Type: application/json" \\
+          -d '{"dataset_id": 3, "model": "claude-sonnet-4-6", "cases_count": 5}'
+    """
+    from config import EVAL_API_KEY
+    eval_key = request.headers.get("X-Eval-Key", "")
+    if EVAL_API_KEY and eval_key != EVAL_API_KEY:
+        return JSONResponse(status_code=403, content={"detail": "Invalid eval API key."})
+
+    dataset = await queries.get_dataset(body.dataset_id)
+    if not dataset:
+        return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
+
+    # Build tag
+    from datetime import datetime
+    model_short = body.model.split("/")[-1][:20] if body.model else "default"
+    tag = f"{body.tag_prefix}-{datetime.now().strftime('%Y%m%d-%H%M')}-{model_short}"
+
+    # Load cases
+    all_cases = await queries.get_cases(body.dataset_id)
+    if body.cases:
+        all_cases = [c for c in all_cases if c.key in body.cases]
+    elif body.cases_count and body.cases_count < len(all_cases):
+        import random
+        all_cases = random.sample(all_cases, body.cases_count)
+
+    cases = [{"key": c.key, "query": c.query, "type": c.type,
+              "constraints": c.constraints, "golden_data": c.golden_data} for c in all_cases]
+
+    if not cases:
+        return JSONResponse(status_code=422, content={"detail": "No cases found."})
+
+    config = {
+        "cases": [c["key"] for c in cases],
+        "trials": body.trials,
+        "concurrency": body.concurrency,
+        "judge_enabled": body.judge_enabled,
+        "model": body.model,
+        "system_prompt": body.system_prompt,
+        "git_commit": _get_git_commit(),
+        "mode": "benchmark",
+    }
+    experiment_id = await queries.create_experiment(body.dataset_id, tag, config)
+
+    asyncio.create_task(
+        run_experiment(experiment_id, cases, concurrency=body.concurrency,
+                       trials=body.trials, model=body.model, system_prompt=body.system_prompt)
+    )
+
+    return {
+        "id": experiment_id,
+        "tag": tag,
+        "status": "running",
+        "cases": len(cases),
+        "model": body.model or "(default)",
+    }

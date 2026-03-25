@@ -24,6 +24,7 @@ class Dataset(BaseModel):
     name: str
     description: str = ""
     suite_type: str = "capability"
+    version: int = 1
     case_count: int = 0
     created_at: float = 0
 
@@ -49,13 +50,16 @@ class ExperimentIn(BaseModel):
     judge_enabled: bool = False
     notes: str = ""                 # free-text notes about this experiment
     mode: str = "benchmark"         # "benchmark" (with hints, 5min) or "product" (no hints, 10min)
-    model: str = ""                 # orchestrator model name (for variable experiments)
+    model: str = ""                 # orchestrator model name (for A/B testing)
     grading_model: str = ""         # LLM judge model name
+    system_prompt: str = ""         # optional system prompt override (for prompt A/B testing)
+    auto_run: bool = False          # if True, start running immediately after creation
 
 
 class Experiment(BaseModel):
     id: int
     dataset_id: int
+    dataset_version: int = 0
     tag: str = ""
     status: str = "pending"
     config: dict = {}
@@ -127,3 +131,5 @@ class ExperimentSummary(BaseModel):
     grader_averages: dict = {}      # {rubric_coverage: 72.3, ...}
     pass_at_k: dict = {}            # {"pass@1": 0.75, "pass@3": 0.92, ...}
     pass_pow_k: dict = {}           # {"pass^1": 0.75, "pass^3": 0.42, ...}
+    suite_type: str = "capability"  # capability | regression (from dataset)
+    primary_metric: str = ""        # e.g. "pass@1: 0.75" or "pass^3: 1.0"

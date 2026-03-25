@@ -33,6 +33,8 @@ async def collect_single_case(
     case: dict,
     trial_num: int = 1,
     auto_clarify: bool = True,
+    model: str = "",
+    system_prompt: str = "",
 ) -> CollectedResult:
     """Collect SSE events for a single case (Phase 1 only — no grading).
 
@@ -40,6 +42,8 @@ async def collect_single_case(
         case: {"key", "query", "type", "constraints", "golden_data"}
         trial_num: Trial number (1-indexed).
         auto_clarify: Auto-answer clarification questions.
+        model: Override orchestrator model for this run.
+        system_prompt: Override system prompt for this run.
 
     Returns:
         CollectedResult with raw SSE data.
@@ -51,7 +55,7 @@ async def collect_single_case(
     clarification_count = 0
 
     while True:
-        result = await collect_sse(query, history)
+        result = await collect_sse(query, history, model=model, system_prompt=system_prompt)
 
         # Auto-answer clarifications
         if result.clarification and auto_clarify and clarification_count < MAX_AUTO_CLARIFICATIONS:
@@ -154,12 +158,18 @@ async def run_experiment(
     concurrency: int = 1,
     trials: int = 1,
     grade_concurrency: int = 2,
+    model: str = "",
+    system_prompt: str = "",
 ):
     """Run all cases: streaming collect→grade pipeline with overlapping phases.
 
     Architecture:
       collect_workers (Semaphore) → grade_queue → grade_workers (Semaphore)
       Grade workers start consuming immediately as traces are collected.
+
+    Args:
+        model: Override orchestrator model for all cases in this experiment.
+        system_prompt: Override system prompt for all cases.
 
     Updates DB traces and broadcasts progress via WebSocket.
     """
@@ -200,7 +210,7 @@ async def run_experiment(
 
         try:
             async with collect_sem:
-                result = await collect_single_case(case, trial_num)
+                result = await collect_single_case(case, trial_num, model=model, system_prompt=system_prompt)
 
             trace_data = _result_to_trace_data(result, case, trial_num)
             await queries.update_trace(trace_id, **trace_data)

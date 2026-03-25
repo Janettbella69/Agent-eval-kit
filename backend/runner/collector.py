@@ -40,6 +40,8 @@ async def collect_sse(
     query: str,
     history: list[dict] | None = None,
     timeout_s: int | None = None,
+    model: str = "",
+    system_prompt: str = "",
 ) -> CollectedResult:
     """Stream SSE from product backend and collect results.
 
@@ -47,6 +49,8 @@ async def collect_sse(
         query: The search query.
         history: Optional conversation history for follow-up queries.
         timeout_s: Override default timeout.
+        model: Override orchestrator model (passed to product backend).
+        system_prompt: Override system prompt (passed to product backend).
 
     Returns:
         CollectedResult with all accumulated data.
@@ -61,7 +65,11 @@ async def collect_sse(
         "X-Eval-Key": EVAL_API_KEY,
         "Content-Type": "application/json",
     }
-    body = {"message": query, "history": history or []}
+    body: dict = {"message": query, "history": history or []}
+    if model:
+        body["model"] = model
+    if system_prompt:
+        body["system_prompt"] = system_prompt
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=30.0)) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:

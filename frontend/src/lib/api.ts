@@ -45,7 +45,10 @@ export const createExperiment = (body: {
   trials?: number
   concurrency?: number
   judge_enabled?: boolean
-}) => fetchJSON<{ id: number }>('/experiments', { method: 'POST', body: JSON.stringify(body) })
+  model?: string
+  system_prompt?: string
+  auto_run?: boolean
+}) => fetchJSON<{ id: number; status?: string }>('/experiments', { method: 'POST', body: JSON.stringify(body) })
 export const runExperiment = (id: number) =>
   fetchJSON<{ status: string }>(`/experiments/${id}/run`, { method: 'POST' })
 export const stopExperiment = (id: number) =>
