@@ -371,10 +371,13 @@ Reasoning: Wrong product recommended. Claims are vague and unverifiable against 
 Compare the agent's guide against expert-annotated golden products. Determine: PASS or FAIL.
 
 ## FAIL Definition
-Agent either: (a) missed all golden products AND did not recommend clearly superior alternatives, OR (b) recommended golden products but stated incorrect specs or omitted critical limitations noted in expert analysis.
+Agent missed all golden products AND recommended products that do NOT address the same use-case requirements in the rubric. Simply recommending different products is NOT automatic failure — the products must fail to meet the rubric's functional requirements.
 
 ## PASS Definition
-Agent recommended at least one golden product (or a clearly equivalent/superior alternative) AND claims are consistent with expert verification — correct key specs, key limitations disclosed.
+Agent recommended products that satisfy the rubric's functional requirements. This includes:
+- Golden products from the expert list, OR
+- Equivalent alternatives that meet the same specs/requirements described in the rubric
+- The key question is: "Do the recommended products solve the user's problem?" — not "Are they the exact same products as the expert list?"
 
 ## Output Format
 Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
@@ -635,11 +638,17 @@ Note: You can only verify whether the source LIST contains relevant entries — 
 ## Protocol
 1. Extract 10-15 factual claims (specs, prices, ratings, comparisons — NOT opinions)
 2. For each: check if a cited source or product data supports it
-3. If grounded/total >= 0.8 AND no critical fabrications → Pass
+3. Count: claims_grounded / claims_checked
+4. Check: are there any CRITICAL fabrications? (wrong price, wrong safety spec, wrong compatibility)
+   - A "critical fabrication" means the claim is CONTRADICTED by available data, not merely unverified
+   - An unverified claim with no contradicting evidence is NOT a critical fabrication
+5. Decision rule (MUST follow strictly):
+   - If grounded/checked >= 0.8 AND zero critical fabrications → result="Pass"
+   - If grounded/checked < 0.8 OR any critical fabrication exists → result="Fail"
 
 ## Output Format
 Call `score_grader` with: grader_name="groundedness", result="Pass" or result="Fail", reasoning.
-Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) critical fabrications (if any).
+Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) grounding_ratio: N%, (4) critical_fabrications: list or "none".
 
 ## Examples
 {calibrated_examples}"""
