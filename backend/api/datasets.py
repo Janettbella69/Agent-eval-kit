@@ -83,7 +83,14 @@ async def import_dataset(body: DatasetIn | None = None, name: str | None = None)
         )
         count += 1
 
-    return {"dataset_id": dataset_id, "name": dataset_name, "cases_imported": count}
+    # Bump dataset version once after batch import
+    if count > 0:
+        version = await queries.bump_dataset_version(dataset_id)
+    else:
+        ds = await queries.get_dataset(dataset_id)
+        version = ds.version if ds else 1
+
+    return {"dataset_id": dataset_id, "name": dataset_name, "cases_imported": count, "version": version}
 
 
 @router.post("/from-experiment")
@@ -272,3 +279,73 @@ async def import_shoppingcomp_all():
 
     total_imported = sum(r.get("imported", 0) for r in results)
     return {"results": results, "total_imported": total_imported}
+
+
+# ── Trace Backflow (replace LangFuse) ────────────────────────────────
+
+@router.post("/{dataset_id}/backflow")
+async def trace_backflow(dataset_id: int, body: dict):
+    """Save a trace as a new case in a dataset (Trace data backflow).
+
+    Per Coze Loop pattern: production traces become ground truth for future evaluation.
+    Replaces the LangFuse → eval import pipeline with direct backflow.
+
+    Body:
+        query: str — the original user query (becomes case.query)
+        guide_text: str — agent's output guide
+        products: list — found products
+        sources: list — cited sources
+        events: list — raw SSE events (becomes trajectory reference)
+        hook_metrics: dict — agent metrics
+        trace_id: str — optional, for dedup
+        category: str — optional, product category tag
+    """
+    dataset = await queries.get_dataset(dataset_id)
+    if not dataset:
+        return JSONResponse(status_code=404, content={"detail": "Dataset not found."})
+
+    query = body.get("query", "")
+    if not query:
+        return JSONResponse(status_code=422, content={"detail": "query is required."})
+
+    # Generate case key from query hash (or use trace_id)
+    import hashlib
+    trace_id = body.get("trace_id", "")
+    case_key = trace_id[:8] if trace_id else hashlib.sha256(query.encode()).hexdigest()[:8]
+
+    # Build golden_data from agent output (this trace becomes the reference)
+    golden_data = {
+        "category": body.get("category", "other"),
+        "source": "backflow",
+        "reference_guide": body.get("guide_text", "")[:5000],
+        "reference_products": body.get("products", [])[:10],
+        "reference_sources": body.get("sources", [])[:20],
+    }
+
+    # Build reference_output with full trajectory
+    reference_output = {
+        "guide_text": body.get("guide_text", ""),
+        "products": body.get("products", []),
+        "sources": body.get("sources", []),
+        "events": body.get("events", []),
+        "hook_metrics": body.get("hook_metrics", {}),
+    }
+
+    await queries.upsert_case(
+        dataset_id=dataset_id,
+        key=case_key,
+        query=query,
+        case_type="backflow",
+        constraints={},
+        golden_data=golden_data,
+        reference_output=reference_output,
+    )
+
+    await queries.bump_dataset_version(dataset_id)
+
+    return {
+        "ok": True,
+        "dataset_id": dataset_id,
+        "case_key": case_key,
+        "query": query[:80],
+    }

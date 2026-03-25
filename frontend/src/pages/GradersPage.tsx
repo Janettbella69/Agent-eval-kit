@@ -12,19 +12,21 @@ interface GraderInfo {
 }
 
 const GRADER_WEIGHTS: Record<string, { weight: number; category: 'code' | 'llm' }> = {
-  // Outcome-focused Code Graders (55%)
-  product_matching: { weight: 0.12, category: 'code' },
-  source_authority: { weight: 0.10, category: 'code' },
-  retrieval_quality: { weight: 0.08, category: 'code' },
+  // Outcome Code Graders (38%)
+  product_matching: { weight: 0.10, category: 'code' },
+  source_authority: { weight: 0.08, category: 'code' },
+  retrieval_quality: { weight: 0.07, category: 'code' },
   output_format: { weight: 0.07, category: 'code' },
   rubric_coverage: { weight: 0.05, category: 'code' },
-  // Process graders → tracked metrics only (weight=0, hidden from weight bar)
-  // efficiency, tool_calls, transcript: recorded in traces but not scored
-  // LLM Semantic Judges (45%) — Binary PASS/FAIL
+  // Trajectory Code Graders (14%) — decision quality
+  tool_calls: { weight: 0.05, category: 'code' },
+  search_quality: { weight: 0.05, category: 'code' },
+  transcript: { weight: 0.04, category: 'code' },
+  // LLM Semantic Judges (48%) — Binary PASS/FAIL
   rubric_compliance: { weight: 0.20, category: 'llm' },
-  groundedness: { weight: 0.22, category: 'llm' },
+  groundedness: { weight: 0.20, category: 'llm' },
   actionability: { weight: 0.08, category: 'llm' },
-  trap_detection: { weight: 0.08, category: 'llm' },
+  trap_detection: { weight: 0.06, category: 'llm' },
 }
 
 export default function GradersPage() {

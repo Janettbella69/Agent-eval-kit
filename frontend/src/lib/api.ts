@@ -121,6 +121,20 @@ export const getValidationSummary = () =>
 export const getGraderDefinitions = () =>
   fetchJSON<Array<{ name: string; weight: number; category: string; requires_golden: boolean }>>('/graders/definitions')
 
+// Trace Backflow (direct trace → dataset, replaces LangFuse)
+export const backflowTrace = (datasetId: number, body: {
+  query: string
+  guide_text: string
+  products: unknown[]
+  sources: unknown[]
+  events?: unknown[]
+  hook_metrics?: Record<string, unknown>
+  trace_id?: string
+  category?: string
+}) => fetchJSON<{ ok: boolean; case_key: string }>(`/datasets/${datasetId}/backflow`, {
+  method: 'POST', body: JSON.stringify(body),
+})
+
 // Open Codes (qualitative labels)
 export const updateOpenCodes = (traceId: number, add: string[] = [], remove: string[] = []) =>
   fetchJSON<{ ok: boolean; open_codes: string[] }>(`/traces/${traceId}/codes`, {

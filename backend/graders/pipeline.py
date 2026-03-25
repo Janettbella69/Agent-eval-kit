@@ -14,6 +14,7 @@ from graders.types import GraderResult, GRADER_DEFS, NEGATIVE_TYPES, TRAP_TYPES
 from graders.scoring import compute_pass_fail_gate
 from graders.composite import compute_composite_score, get_effective_weights
 from graders.failure_funnel import detect_failure_stage
+from graders.search_quality import grade_search_quality
 from graders.code_graders import (
     grade_rubric_coverage,
     grade_product_matching,
@@ -129,6 +130,8 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
         _run_code_grader("state_check", grade_state_check, result)
     if effective_weights.get("retrieval_quality", 0) > 0:
         _run_code_grader("retrieval_quality", grade_retrieval_quality, result, case.get("query", ""))
+    if effective_weights.get("search_quality", 0) > 0:
+        _run_code_grader("search_quality", grade_search_quality, result, case.get("query", ""))
 
     # ── LLM Graders (graceful degradation) ──
     judge_prompts: dict[str, str] = {}

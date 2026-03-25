@@ -39,30 +39,31 @@ class GraderDef:
 # Standard grader weights (normal cases)
 # Weights sum to 1.0; composite.py normalizes if some graders are skipped.
 #
-# Design principles (Anthropic eval blog + Hamel eval-skills, 2026-03-25):
-# 1. "Grade what the agent produced, not the path it took"
-#    → Process graders (tool_calls, transcript, efficiency) weight=0 (tracked metrics only)
-# 2. Research Agent core: Groundedness + Coverage + Source Quality (Anthropic §Research)
-#    → groundedness, rubric_compliance, source_authority carry most weight
-# 3. Code graders for deterministic checks, LLM for semantic judgment (Hamel)
-# 4. Outcome graders (55%) + LLM semantic judges (45%) = 100% result-focused
+# Design principles (Anthropic eval blog + Coze Loop Re-Act Agent eval, 2026-03-25):
+# 1. Three evaluator types: Code (deterministic), LLM (semantic), Agent (tools+LLM)
+# 2. Anthropic: Graders evaluate BOTH trajectory AND outcome → scores
+# 3. Coze Loop: 任务完成度 + 工具选择正确性 + 工具参数正确性 + 轨迹质量
+# 4. Trajectory graders assess decision quality (not penalize non-standard paths)
+# 5. Tracked metrics (efficiency) record but don't score
 GRADER_DEFS = [
-    # ── Outcome-focused Code Graders (55% total) ──
-    GraderDef("product_matching",      0.12, "code", requires_golden=True),  # found the right products?
-    GraderDef("source_authority",      0.10, "code"),   # sources authoritative (T1-T6)?
-    GraderDef("retrieval_quality",     0.08, "code"),   # search coverage + source diversity
+    # ── Outcome Code Graders (38%) — "What did the agent produce?" ──
+    GraderDef("product_matching",      0.10, "code", requires_golden=True),  # found the right products?
+    GraderDef("source_authority",      0.08, "code"),   # sources authoritative (T1-T6)?
+    GraderDef("retrieval_quality",     0.07, "code"),   # search coverage + source diversity
     GraderDef("output_format",         0.07, "code"),   # structure: table, citations, pros/cons
     GraderDef("rubric_coverage",       0.05, "code", requires_golden=True),  # keyword coverage (weak for CJK)
-    # ── Process Graders → tracked metrics only (weight=0) ──
-    GraderDef("efficiency",            0.00, "code"),   # tracked: products per search
-    GraderDef("tool_calls",            0.00, "code"),   # tracked: tool diversity
-    GraderDef("transcript",            0.00, "code"),   # tracked: turn count, search loops
     GraderDef("state_check",           0.00, "code"),   # disabled: duplicates gate checks
-    # ── LLM Semantic Judges (45% total) — Binary PASS/FAIL ──
+    # ── Trajectory Code Graders (10%) — "Were the agent's decisions good?" ──
+    GraderDef("tool_calls",            0.05, "code"),   # Tool selection quality (right tools for the job?)
+    GraderDef("transcript",            0.04, "code"),   # Trajectory quality (efficient path? no loops?)
+    GraderDef("search_quality",        0.05, "code"),   # Search query quality (specific? diverse? expert sources?)
+    # ── Tracked Metrics (weight=0) — recorded but not scored ──
+    GraderDef("efficiency",            0.00, "code"),   # tracked: products per search (noisy metric)
+    # ── LLM Semantic Judges (48%) — Binary PASS/FAIL ──
     GraderDef("rubric_compliance",     0.20, "llm",  requires_golden=True),  # Coverage: rubric requirements met?
-    GraderDef("groundedness",          0.22, "llm"),   # Groundedness: claims supported by sources?
+    GraderDef("groundedness",          0.20, "llm"),   # Groundedness: claims supported by sources?
     GraderDef("actionability",         0.08, "llm"),   # can user make purchase decision?
-    GraderDef("trap_detection",        0.08, "llm",  requires_golden=True),  # risk/trap identified?
+    GraderDef("trap_detection",        0.06, "llm",  requires_golden=True),  # risk/trap identified?
 ]
 
 # Trap case weight overrides
