@@ -38,27 +38,31 @@ class GraderDef:
 
 # Standard grader weights (normal cases)
 # Weights sum to 1.0; composite.py normalizes if some graders are skipped.
-# Weights rebalanced per Hamel eval-audit findings (2026-03-15):
-# - rubric_coverage (code) demoted: keyword matching is a weak signal, especially for CJK
-# - rubric_compliance (LLM) promoted: semantic evaluation is the real rubric check
-# - groundedness (LLM) kept high: hallucination detection is critical
-# - Weights sum ~1.0; composite.py normalizes if some graders are skipped
+#
+# Design principles (Anthropic eval blog + Hamel eval-skills, 2026-03-25):
+# 1. "Grade what the agent produced, not the path it took"
+#    → Process graders (tool_calls, transcript, efficiency) weight=0 (tracked metrics only)
+# 2. Research Agent core: Groundedness + Coverage + Source Quality (Anthropic §Research)
+#    → groundedness, rubric_compliance, source_authority carry most weight
+# 3. Code graders for deterministic checks, LLM for semantic judgment (Hamel)
+# 4. Outcome graders (55%) + LLM semantic judges (45%) = 100% result-focused
 GRADER_DEFS = [
-    # Code graders (~40% total) — deterministic, instant, cheap
-    GraderDef("rubric_coverage",       0.03, "code", requires_golden=True),  # keyword match weak for CJK
-    GraderDef("product_matching",      0.08, "code", requires_golden=True),
-    GraderDef("source_authority",      0.08, "code"),
-    GraderDef("output_format",         0.05, "code"),
-    GraderDef("efficiency",            0.03, "code"),   # fixed: empty results → 0, not 100
-    GraderDef("tool_calls",            0.04, "code"),
-    GraderDef("transcript",            0.04, "code"),
+    # ── Outcome-focused Code Graders (55% total) ──
+    GraderDef("product_matching",      0.12, "code", requires_golden=True),  # found the right products?
+    GraderDef("source_authority",      0.10, "code"),   # sources authoritative (T1-T6)?
+    GraderDef("retrieval_quality",     0.08, "code"),   # search coverage + source diversity
+    GraderDef("output_format",         0.07, "code"),   # structure: table, citations, pros/cons
+    GraderDef("rubric_coverage",       0.05, "code", requires_golden=True),  # keyword coverage (weak for CJK)
+    # ── Process Graders → tracked metrics only (weight=0) ──
+    GraderDef("efficiency",            0.00, "code"),   # tracked: products per search
+    GraderDef("tool_calls",            0.00, "code"),   # tracked: tool diversity
+    GraderDef("transcript",            0.00, "code"),   # tracked: turn count, search loops
     GraderDef("state_check",           0.00, "code"),   # disabled: duplicates gate checks
-    GraderDef("retrieval_quality",     0.05, "code"),
-    # LLM graders (~60% total) — semantic evaluation, the real judges
-    GraderDef("rubric_compliance",     0.25, "llm",  requires_golden=True),  # core semantic rubric check
-    GraderDef("groundedness",          0.18, "llm"),   # hallucination detection
-    GraderDef("actionability",         0.12, "llm"),   # purchase decision quality
-    GraderDef("trap_detection",        0.05, "llm",  requires_golden=True),
+    # ── LLM Semantic Judges (45% total) — Binary PASS/FAIL ──
+    GraderDef("rubric_compliance",     0.20, "llm",  requires_golden=True),  # Coverage: rubric requirements met?
+    GraderDef("groundedness",          0.22, "llm"),   # Groundedness: claims supported by sources?
+    GraderDef("actionability",         0.08, "llm"),   # can user make purchase decision?
+    GraderDef("trap_detection",        0.08, "llm",  requires_golden=True),  # risk/trap identified?
 ]
 
 # Trap case weight overrides

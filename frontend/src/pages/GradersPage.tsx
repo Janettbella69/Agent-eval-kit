@@ -12,18 +12,19 @@ interface GraderInfo {
 }
 
 const GRADER_WEIGHTS: Record<string, { weight: number; category: 'code' | 'llm' }> = {
-  rubric_coverage: { weight: 0.03, category: 'code' },
-  product_matching: { weight: 0.08, category: 'code' },
-  source_authority: { weight: 0.08, category: 'code' },
-  output_format: { weight: 0.05, category: 'code' },
-  efficiency: { weight: 0.03, category: 'code' },
-  tool_calls: { weight: 0.04, category: 'code' },
-  transcript: { weight: 0.04, category: 'code' },
-  retrieval_quality: { weight: 0.05, category: 'code' },
-  rubric_compliance: { weight: 0.25, category: 'llm' },
-  groundedness: { weight: 0.18, category: 'llm' },
-  actionability: { weight: 0.12, category: 'llm' },
-  trap_detection: { weight: 0.05, category: 'llm' },
+  // Outcome-focused Code Graders (55%)
+  product_matching: { weight: 0.12, category: 'code' },
+  source_authority: { weight: 0.10, category: 'code' },
+  retrieval_quality: { weight: 0.08, category: 'code' },
+  output_format: { weight: 0.07, category: 'code' },
+  rubric_coverage: { weight: 0.05, category: 'code' },
+  // Process graders → tracked metrics only (weight=0, hidden from weight bar)
+  // efficiency, tool_calls, transcript: recorded in traces but not scored
+  // LLM Semantic Judges (45%) — Binary PASS/FAIL
+  rubric_compliance: { weight: 0.20, category: 'llm' },
+  groundedness: { weight: 0.22, category: 'llm' },
+  actionability: { weight: 0.08, category: 'llm' },
+  trap_detection: { weight: 0.08, category: 'llm' },
 }
 
 export default function GradersPage() {
@@ -115,11 +116,11 @@ export default function GradersPage() {
         <div className="flex items-center gap-4 mt-3">
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
-            Code Grader (~40%)
+            Code Grader (~55%) — Outcome focused
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="w-2.5 h-2.5 rounded-sm bg-purple-500" />
-            LLM Grader (~60%) — Binary PASS/FAIL
+            LLM Grader (~45%) — Binary PASS/FAIL
           </span>
         </div>
       </div>
