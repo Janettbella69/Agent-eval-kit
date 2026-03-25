@@ -29,6 +29,74 @@ def _pick_clarification_answer(clarification: dict) -> str:
     return "give me general recommendations"
 
 
+async def _simulate_user_answer(original_query: str, clarification: dict) -> str:
+    """Use LLM to simulate a realistic user response to a clarification question.
+
+    Anthropic eval blog: "conversational agents often require a second LLM to simulate
+    the user" for multi-turn evaluation. This simulates a knowledgeable shopper who
+    answers concisely based on their original intent.
+
+    Falls back to _pick_clarification_answer on any error (fail-open).
+    """
+    question = clarification.get("question", "")
+    options = clarification.get("options", [])
+    question_type = clarification.get("question_type", "radio")
+
+    if not question:
+        return _pick_clarification_answer(clarification)
+
+    try:
+        import anthropic
+        import os
+
+        auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+
+        client = anthropic.AsyncAnthropic(
+            api_key=auth_token or api_key,
+            timeout=10.0,
+            **({"base_url": base_url} if base_url else {}),
+        )
+
+        options_text = "\n".join(f"- {o}" for o in options) if options else "(no predefined options)"
+
+        resp = await client.messages.create(
+            model="minimax/minimax-m2.7",
+            max_tokens=100,
+            system=(
+                "You are simulating a real shopper answering a clarification question. "
+                "Based on the original shopping query, pick the most reasonable answer. "
+                "If options are provided, pick one (or write a brief custom answer). "
+                "Reply with ONLY the answer text, nothing else. Keep it under 20 words."
+            ),
+            messages=[{
+                "role": "user",
+                "content": f"Original query: {original_query}\n\nClarification: {question}\n\nOptions:\n{options_text}\n\nYour answer:",
+            }],
+        )
+
+        # Extract text from response (handle minimax thinking blocks)
+        text = ""
+        thinking = ""
+        for block in resp.content:
+            if hasattr(block, "text") and block.type == "text":
+                text += block.text
+            elif block.type == "thinking" and hasattr(block, "thinking"):
+                thinking += block.thinking
+
+        answer = (text.strip() or thinking.strip())[:200]
+        if answer:
+            logger.info(f"User simulator: Q='{question[:40]}' A='{answer[:40]}'")
+            return answer
+
+        await client.close()
+    except Exception as e:
+        logger.warning(f"User simulator failed: {e} — falling back to first option")
+
+    return _pick_clarification_answer(clarification)
+
+
 async def collect_single_case(
     case: dict,
     trial_num: int = 1,
@@ -57,10 +125,10 @@ async def collect_single_case(
     while True:
         result = await collect_sse(query, history, model=model, system_prompt=system_prompt)
 
-        # Auto-answer clarifications
+        # Auto-answer clarifications with LLM user simulator
         if result.clarification and auto_clarify and clarification_count < MAX_AUTO_CLARIFICATIONS:
             clarification_count += 1
-            answer = _pick_clarification_answer(result.clarification)
+            answer = await _simulate_user_answer(query, result.clarification)
             history.append({"role": "assistant", "content": f"[clarification] {result.clarification.get('question', '')}"})
             history.append({"role": "user", "content": answer})
             continue
