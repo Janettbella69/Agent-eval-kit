@@ -21,7 +21,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # L2 grading model — MUST be stronger than the product orchestrator (claude-sonnet-4-6).
 # Judge needs superior reasoning to catch errors the weaker model makes.
 # Uses OpenRouter (ANTHROPIC_BASE_URL) to access cross-vendor models.
-GRADING_MODEL = os.getenv("GRADING_MODEL", "openai/gpt-5.4")
+GRADING_MODEL = os.getenv("GRADING_MODEL", "minimax/minimax-m2.7-highspeed")
 
 # Scoring thresholds
 PASS_THRESHOLD = int(os.getenv("PASS_THRESHOLD", "70"))

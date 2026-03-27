@@ -162,6 +162,10 @@ async def import_shoppingcomp(
             types[case_type] = types.get(case_type, 0) + 1
             categories[category] = categories.get(category, 0) + 1
 
+    # Bump dataset version once after batch import
+    if imported > 0:
+        await queries.bump_dataset_version(dataset_id)
+
     return ImportResult(
         dataset_id=dataset_id,
         total=imported + skipped,

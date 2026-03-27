@@ -40,6 +40,13 @@ def _safe_suite_type(r) -> str:
         return "capability"
 
 
+def _safe_version(r) -> int:
+    try:
+        return r["version"] or 1
+    except (IndexError, KeyError):
+        return 1
+
+
 async def list_datasets() -> list[Dataset]:
     db = await get_db()
     rows = await db.execute_fetchall(
@@ -48,7 +55,7 @@ async def list_datasets() -> list[Dataset]:
            GROUP BY d.id ORDER BY d.created_at DESC"""
     )
     return [Dataset(id=r["id"], name=r["name"], description=r["description"],
-                    suite_type=_safe_suite_type(r),
+                    suite_type=_safe_suite_type(r), version=_safe_version(r),
                     case_count=r["case_count"], created_at=r["created_at"]) for r in rows]
 
 
@@ -64,7 +71,7 @@ async def get_dataset(dataset_id: int) -> Dataset | None:
         return None
     r = row[0]
     return Dataset(id=r["id"], name=r["name"], description=r["description"],
-                   suite_type=_safe_suite_type(r),
+                   suite_type=_safe_suite_type(r), version=_safe_version(r),
                    case_count=r["case_count"], created_at=r["created_at"])
 
 
@@ -82,7 +89,7 @@ async def get_dataset_by_name(name: str) -> Dataset | None:
     if r["id"] is None:
         return None
     return Dataset(id=r["id"], name=r["name"], description=r["description"],
-                   suite_type=_safe_suite_type(r),
+                   suite_type=_safe_suite_type(r), version=_safe_version(r),
                    case_count=r["case_count"], created_at=r["created_at"])
 
 
@@ -112,6 +119,20 @@ async def upsert_case(
     )
     await db.commit()
     return cursor.lastrowid  # type: ignore
+
+
+async def bump_dataset_version(dataset_id: int) -> int:
+    """Increment dataset version by 1. Call after batch case imports."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE datasets SET version = COALESCE(version, 0) + 1 WHERE id = ?",
+        (dataset_id,),
+    )
+    await db.commit()
+    row = await db.execute_fetchall(
+        "SELECT version FROM datasets WHERE id = ?", (dataset_id,),
+    )
+    return row[0]["version"] if row else 1
 
 
 async def get_cases(dataset_id: int) -> list[Case]:
@@ -183,12 +204,22 @@ def _row_to_case(r) -> Case:
 
 async def create_experiment(dataset_id: int, tag: str = "", config: dict | None = None) -> int:
     db = await get_db()
+    # Snapshot current dataset version
+    ds = await get_dataset(dataset_id)
+    ds_version = ds.version if ds else 0
     cursor = await db.execute(
-        "INSERT INTO experiments (dataset_id, tag, config) VALUES (?, ?, ?)",
-        (dataset_id, tag, json.dumps(config or {})),
+        "INSERT INTO experiments (dataset_id, tag, config, dataset_version) VALUES (?, ?, ?, ?)",
+        (dataset_id, tag, json.dumps(config or {}), ds_version),
     )
     await db.commit()
     return cursor.lastrowid  # type: ignore
+
+
+def _safe_dataset_version(r) -> int:
+    try:
+        return r["dataset_version"] or 0
+    except (IndexError, KeyError):
+        return 0
 
 
 async def get_experiment(experiment_id: int) -> Experiment | None:
@@ -200,7 +231,8 @@ async def get_experiment(experiment_id: int) -> Experiment | None:
         return None
     r = rows[0]
     return Experiment(
-        id=r["id"], dataset_id=r["dataset_id"], tag=r["tag"],
+        id=r["id"], dataset_id=r["dataset_id"],
+        dataset_version=_safe_dataset_version(r), tag=r["tag"],
         status=r["status"], config=json.loads(r["config"]),
         summary=json.loads(r["summary"]), created_at=r["created_at"],
         finished_at=r["finished_at"],
@@ -235,7 +267,8 @@ async def list_experiments(limit: int = 50) -> list[dict]:
     results = []
     for r in rows:
         exp = Experiment(
-            id=r["id"], dataset_id=r["dataset_id"], tag=r["tag"],
+            id=r["id"], dataset_id=r["dataset_id"],
+            dataset_version=_safe_dataset_version(r), tag=r["tag"],
             status=r["status"], config=json.loads(r["config"]),
             summary=json.loads(r["summary"]), created_at=r["created_at"],
             finished_at=r["finished_at"],
@@ -366,6 +399,10 @@ def _row_to_trace(r) -> Trace:
 
 
 async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
+    exp = await get_experiment(experiment_id)
+    ds = await get_dataset(exp.dataset_id) if exp else None
+    suite_type = ds.suite_type if ds else "capability"
+
     traces = await get_experiment_traces(experiment_id)
     completed = [t for t in traces if t.status in ("done", "graded", "collected")]
     scores = [t.final_score for t in completed]
@@ -443,6 +480,16 @@ async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
     tokens = [t.input_tokens + t.output_tokens for t in completed if t.input_tokens + t.output_tokens > 0]
     toolcalls = [len(t.tool_names) for t in completed]
 
+    # Primary metric depends on suite_type (Anthropic evals: capability vs regression)
+    if suite_type == "regression":
+        # Regression: pass^k is key — agent must ALWAYS pass
+        best_pow = max(pass_pow_k.items(), key=lambda x: int(x[0].split("^")[1])) if pass_pow_k else ("pass^1", 0)
+        primary_metric = f"{best_pow[0]}: {best_pow[1]}"
+    else:
+        # Capability: pass@k is key — can the agent do it at all?
+        best_at = max(pass_at_k.items(), key=lambda x: int(x[0].split("@")[1])) if pass_at_k else ("pass@1", 0)
+        primary_metric = f"{best_at[0]}: {best_at[1]}"
+
     return ExperimentSummary(
         total_cases=len(traces),
         completed=len(completed),
@@ -462,6 +509,8 @@ async def compute_experiment_summary(experiment_id: int) -> ExperimentSummary:
         grader_averages=grader_averages,
         pass_at_k=pass_at_k,
         pass_pow_k=pass_pow_k,
+        suite_type=suite_type,
+        primary_metric=primary_metric,
     )
 
 
@@ -526,6 +575,107 @@ async def compute_judge_alignment() -> dict:
         "total_traces": total_all,
         "observed_pass_rate": round(passed_all / total_all, 3) if total_all else None,
         "corrected_pass_rate": round(corrected_pass_rate, 3) if corrected_pass_rate is not None else None,
+    }
+
+
+# ── Per-Grader Human-LLM Agreement ─────────────
+
+async def compute_grader_agreement() -> dict:
+    """Compute per-grader agreement between human annotations and LLM scores.
+
+    For each grader that has human annotations, computes:
+      - count: number of annotated traces
+      - mean_diff: average |human - llm| (lower = better)
+      - agreement_rate: fraction where |diff| <= 15
+      - pearson_r: Pearson correlation (None if < 3 samples)
+      - bias: mean(llm - human), positive = LLM scores higher
+
+    Returns:
+        {
+            "total_annotated_traces": int,
+            "graders": {
+                "grader_name": {count, mean_diff, agreement_rate, pearson_r, bias, pairs: [...]}
+            }
+        }
+    """
+    import json as _json
+    import math
+
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT id, human_scores, composite_scores
+           FROM traces
+           WHERE human_scores IS NOT NULL AND human_scores != '{}'
+             AND status IN ('done', 'graded')"""
+    )
+    if not rows:
+        return {"total_annotated_traces": 0, "graders": {}}
+
+    # Collect (human, llm) pairs per grader
+    grader_pairs: dict[str, list[dict]] = {}
+    for r in rows:
+        hs_raw = r["human_scores"]
+        cs_raw = r["composite_scores"]
+        hs = _json.loads(hs_raw) if isinstance(hs_raw, str) else (hs_raw or {})
+        cs = _json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or {})
+
+        for grader_name, h_data in hs.items():
+            if not isinstance(h_data, dict):
+                continue
+            human_score = h_data.get("score")
+            if human_score is None:
+                continue
+
+            # Match against LLM composite score
+            c_data = cs.get(grader_name)
+            if not isinstance(c_data, dict):
+                continue
+            llm_score = c_data.get("score")
+            if llm_score is None:
+                continue
+
+            grader_pairs.setdefault(grader_name, []).append({
+                "trace_id": r["id"],
+                "human": float(human_score),
+                "llm": float(llm_score),
+            })
+
+    # Compute stats per grader
+    graders: dict[str, dict] = {}
+    for gname, pairs in grader_pairs.items():
+        n = len(pairs)
+        diffs = [abs(p["human"] - p["llm"]) for p in pairs]
+        biases = [p["llm"] - p["human"] for p in pairs]
+
+        mean_diff = sum(diffs) / n
+        agreement_rate = sum(1 for d in diffs if d <= 15) / n
+        bias = sum(biases) / n
+
+        # Pearson correlation (requires >= 3 samples)
+        pearson_r = None
+        if n >= 3:
+            h_vals = [p["human"] for p in pairs]
+            l_vals = [p["llm"] for p in pairs]
+            h_mean = sum(h_vals) / n
+            l_mean = sum(l_vals) / n
+            num = sum((h - h_mean) * (l - l_mean) for h, l in zip(h_vals, l_vals))
+            den_h = math.sqrt(sum((h - h_mean) ** 2 for h in h_vals))
+            den_l = math.sqrt(sum((l - l_mean) ** 2 for l in l_vals))
+            if den_h > 1e-9 and den_l > 1e-9:
+                pearson_r = round(num / (den_h * den_l), 3)
+
+        graders[gname] = {
+            "count": n,
+            "mean_diff": round(mean_diff, 1),
+            "agreement_rate": round(agreement_rate, 3),
+            "pearson_r": pearson_r,
+            "bias": round(bias, 1),
+            "pairs": pairs,  # for frontend scatter plot
+        }
+
+    return {
+        "total_annotated_traces": len(rows),
+        "graders": graders,
     }
 
 
@@ -682,7 +832,22 @@ async def compare_experiments(base_id: int, target_id: int) -> dict:
     base_avg = round(sum(base_scores) / len(base_scores), 2) if base_scores else 0
     target_avg = round(sum(target_scores) / len(target_scores), 2) if target_scores else 0
 
+    # Look up dataset suite_type for regression alerting
+    ds = await get_dataset(base_exp.dataset_id) if base_exp else None
+    suite_type = ds.suite_type if ds else "capability"
+
+    # Regression alert: for regression suites, ANY regression is critical
+    regression_alert = None
+    if suite_type == "regression" and regressed > 0:
+        regressed_cases = [c["case_key"] for c in cases if c["status"] == "regressed"]
+        regression_alert = {
+            "severity": "critical",
+            "message": f"{regressed} regression case(s) broke — previously passing cases now fail",
+            "case_keys": regressed_cases[:10],
+        }
+
     return {
+        "suite_type": suite_type,
         "base": {
             "id": base_id,
             "tag": base_exp.tag if base_exp else "",
@@ -706,6 +871,7 @@ async def compare_experiments(base_id: int, target_id: int) -> dict:
             "base_avg": base_avg,
             "target_avg": target_avg,
         },
+        "regression_alert": regression_alert,
     }
 
 

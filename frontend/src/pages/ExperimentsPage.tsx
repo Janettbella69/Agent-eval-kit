@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { listExperiments, listDatasets, createExperiment, runExperiment } from '../lib/api.ts'
+import { listExperiments, listDatasets, createExperiment } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
 import type { Experiment, Dataset } from '../types.ts'
 

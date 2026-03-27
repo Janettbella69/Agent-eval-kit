@@ -7,6 +7,7 @@ GET    /api/traces/{id}/logs   Grading execution log
 GET    /api/cases/history      Case score history (saturation tracking)
 POST   /api/traces/{id}/codes  Add/remove open codes (qualitative labels)
 GET    /api/traces/coding-analysis  Aggregate open codes across traces
+GET    /api/traces/grader-agreement  Per-grader human-LLM agreement stats
 POST   /api/traces/analyze     AI trace analysis (Claude-powered)
 GET    /api/traces/analyze/{request_id}  Poll AI analysis result
 GET    /api/traces/review-queue  Sample traces for transcript review
@@ -53,6 +54,17 @@ async def get_judge_alignment():
     """
     alignment = await queries.compute_judge_alignment()
     return alignment
+
+
+@router.get("/grader-agreement")
+async def get_grader_agreement():
+    """Per-grader agreement between human annotations and LLM scores.
+
+    Returns per-grader stats: count, mean_diff, agreement_rate, pearson_r, bias,
+    plus scatter plot data (human vs LLM pairs per grader).
+    Requires human score annotations on traces (via POST /{trace_id}/annotate).
+    """
+    return await queries.compute_grader_agreement()
 
 
 @router.get("/coding-analysis")
@@ -368,7 +380,7 @@ async def get_analysis_result(request_id: str):
 
 
 async def _run_analysis(request_id: str, trace_ids: list[int], question: str):
-    """Background task: load traces, build rich context, call GPT-5.4 via OpenRouter."""
+    """Background task: load traces, build rich context, call GPT-5.4 (OpenAI direct) or fallback."""
     try:
         traces = []
         for tid in trace_ids[:5]:  # Cap at 5 traces to limit context
@@ -391,35 +403,59 @@ async def _run_analysis(request_id: str, trace_ids: list[int], question: str):
 
         full_context = "\n\n---\n\n".join(context_parts)
 
-        # Call GPT-5.4 via OpenRouter (same routing as L2 judge)
+        # Call LLM for analysis — prefer OpenAI direct (avoids OpenRouter bans)
         try:
             import os
-            import anthropic
+            openai_key = os.getenv("OPENAI_API_KEY", "")
 
-            base_url = os.getenv("ANTHROPIC_BASE_URL", "")
-            auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
-            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            if openai_key:
+                # Path 1: OpenAI direct (preferred — strongest available model)
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=openai_key)
+                model = os.getenv("ANALYSIS_MODEL", "gpt-5.4")
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_completion_tokens=4000,
+                    temperature=0.2,
+                    messages=[
+                        {"role": "system", "content": _ANALYSIS_SYSTEM_PROMPT},
+                        {"role": "user", "content": f"""Analyze the following trace(s) and answer my question.
 
-            # Use OpenRouter if configured, otherwise direct Anthropic
-            if base_url and auth_token:
-                client = anthropic.AsyncAnthropic(
-                    base_url=base_url,
-                    api_key=auth_token,
+{full_context}
+
+---
+
+**Question**: {question}
+
+Provide a structured analysis following the output format in your system prompt.
+Reference specific trace IDs, grader scores, and error taxonomy codes."""},
+                    ],
                 )
-                model = os.getenv("GRADING_MODEL", "openai/gpt-5.4")
-            elif api_key:
-                client = anthropic.AsyncAnthropic(api_key=api_key)
-                model = "claude-sonnet-4-6"
+                result_text = response.choices[0].message.content or "No response generated."
+                model_used = model
             else:
-                raise RuntimeError("No API key configured (ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY)")
+                # Path 2: Anthropic SDK (via OpenRouter or direct)
+                import anthropic
+                base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+                auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+                api_key = os.getenv("ANTHROPIC_API_KEY", "")
 
-            response = await client.messages.create(
-                model=model,
-                max_tokens=4000,
-                system=_ANALYSIS_SYSTEM_PROMPT,
-                messages=[{
-                    "role": "user",
-                    "content": f"""Analyze the following trace(s) and answer my question.
+                if base_url and auth_token:
+                    client = anthropic.AsyncAnthropic(base_url=base_url, api_key=auth_token)
+                    model = os.getenv("GRADING_MODEL", "minimax/minimax-m2.7")
+                elif api_key:
+                    client = anthropic.AsyncAnthropic(api_key=api_key)
+                    model = "claude-sonnet-4-6"
+                else:
+                    raise RuntimeError("No API key configured (OPENAI_API_KEY, ANTHROPIC_AUTH_TOKEN, or ANTHROPIC_API_KEY)")
+
+                response = await client.messages.create(
+                    model=model,
+                    max_tokens=4000,
+                    system=_ANALYSIS_SYSTEM_PROMPT,
+                    messages=[{
+                        "role": "user",
+                        "content": f"""Analyze the following trace(s) and answer my question.
 
 {full_context}
 
@@ -429,10 +465,10 @@ async def _run_analysis(request_id: str, trace_ids: list[int], question: str):
 
 Provide a structured analysis following the output format in your system prompt.
 Reference specific trace IDs, grader scores, and error taxonomy codes."""
-                }],
-            )
-            result_text = response.content[0].text if response.content else "No response generated."
-            model_used = model
+                    }],
+                )
+                result_text = response.content[0].text if response.content else "No response generated."
+                model_used = model
         except Exception as e:
             result_text = f"AI analysis unavailable. Manual analysis context:\n\n{full_context[:5000]}\n\n(Error: {str(e)[:200]})"
             model_used = "fallback"

@@ -3,6 +3,7 @@ export interface Dataset {
   name: string
   description: string
   suite_type: 'capability' | 'regression'
+  version: number
   case_count: number
   created_at: number
 }
@@ -48,6 +49,7 @@ export interface SceneAnnotation {
 export interface Experiment {
   id: number
   dataset_id: number
+  dataset_version: number
   dataset_name?: string
   tag: string
   status: string
@@ -90,6 +92,8 @@ export interface ExperimentSummary {
   grader_averages: Record<string, number>
   pass_at_k: Record<string, number>
   pass_pow_k: Record<string, number>
+  suite_type: string
+  primary_metric: string
 }
 
 export interface Trace {
