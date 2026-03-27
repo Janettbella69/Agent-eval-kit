@@ -310,6 +310,45 @@ async def import_production_traces(body: ImportRequest):
     }
 
 
+# ── Source extraction from guide text ────────────
+
+def _extract_sources_from_guide(guide_text: str) -> list[dict]:
+    """Extract sources from inline citations [[Name]](url) in guide text.
+
+    Fallback for production traces where the agent emitted inline citations
+    but no separate ```sources``` JSON block. Deduplicates by URL.
+    """
+    import re
+    from urllib.parse import urlparse
+
+    refs = re.findall(r'\[\[([^\]]+)\]\]\(([^)]+)\)', guide_text)
+    if not refs:
+        return []
+
+    seen_urls: set[str] = set()
+    sources = []
+    for name, url in refs:
+        url = url.strip()
+        if url in seen_urls or not url.startswith("http"):
+            continue
+        seen_urls.add(url)
+
+        try:
+            domain = urlparse(url).netloc.lstrip("www.")
+        except Exception:
+            domain = ""
+
+        sources.append({
+            "type": "web",
+            "title": name.strip(),
+            "url": url,
+            "domain": domain,
+            "description": "",
+        })
+
+    return sources
+
+
 # ── Helpers ──────────────────────────────────────
 
 async def _get_imported_langfuse_ids() -> set[str]:
@@ -379,6 +418,10 @@ def _convert_langfuse_trace(lf_trace) -> dict | None:
             sources = json.loads(sources)
         except Exception:
             sources = []
+
+    # Fallback: extract sources from inline citations [[Name]](url) in guide text
+    if not sources and guide_text:
+        sources = _extract_sources_from_guide(guide_text)
 
     # Reconstruct basic events from output + metadata
     events = _reconstruct_events(lf_trace)

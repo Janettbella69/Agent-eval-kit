@@ -4,24 +4,27 @@ Tools are registered via @tool decorator and served as an in-process MCP server.
 The eval agent calls these tools during its analysis of a shopping guide.
 """
 
-from contextvars import ContextVar
 from typing import Any
 
 import httpx
 from claude_agent_sdk import tool, create_sdk_mcp_server
 
 # ── Shared state for collecting scores ──
-_scores_var: ContextVar[dict | None] = ContextVar("eval_scores", default=None)
+# Use a plain dict instead of ContextVar — the MCP tool callback runs in a
+# different async context than the caller, so ContextVar loses state.
+# Eval graders run sequentially (one at a time), so a module-level dict is safe.
+_scores: dict = {}
 
 
 def init_scores():
     """Initialize a fresh scores dict for this eval run."""
-    _scores_var.set({})
+    global _scores
+    _scores = {}
 
 
 def get_scores() -> dict:
     """Retrieve collected scores."""
-    return _scores_var.get() or {}
+    return _scores
 
 
 # ── Tools ──
@@ -40,10 +43,8 @@ def get_scores() -> dict:
     },
 )
 async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
-    scores = _scores_var.get()
-    if scores is None:
-        scores = {}
-        _scores_var.set(scores)
+    global _scores
+    scores = _scores
 
     grader_name = args.get("grader_name", "").strip()
     reasoning = args.get("reasoning", "")
@@ -115,10 +116,8 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def score_dimension(args: dict[str, Any]) -> dict[str, Any]:
-    scores = _scores_var.get()
-    if scores is None:
-        scores = {}
-        _scores_var.set(scores)
+    global _scores
+    scores = _scores
 
     dimension = args.get("dimension", "").strip().lower()
     verdict = args.get("verdict", "UNKNOWN").strip().upper()
