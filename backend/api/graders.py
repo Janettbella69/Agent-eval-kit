@@ -1,12 +1,22 @@
-"""Grader validation and calibration API endpoints."""
+"""Grader validation, calibration, and judge prompt management API endpoints."""
 
 import time
+from pydantic import BaseModel
 from fastapi import APIRouter
 
 from graders.validation import validate_grader_from_annotations
 from graders.types import GRADER_DEFS
 
 router = APIRouter(prefix="/api/graders", tags=["graders"])
+
+
+# ── Models ──
+
+class SaveJudgePromptRequest(BaseModel):
+    grader_name: str
+    system_prompt: str
+    few_shots: list = []
+    notes: str = ""
 
 
 @router.get("/definitions")
@@ -122,3 +132,158 @@ async def get_validation_summary():
             }
 
     return summary
+
+
+# ── Judge Prompt Management ────────────────────
+
+@router.get("/prompts")
+async def list_judge_prompts(grader_name: str | None = None):
+    """List all judge prompt versions, optionally filtered by grader."""
+    from storage import queries
+    return await queries.list_judge_prompts(grader_name)
+
+
+@router.get("/prompts/{prompt_id}")
+async def get_judge_prompt(prompt_id: int):
+    """Get a specific judge prompt by ID (any version)."""
+    from storage import queries
+    prompt = await queries.get_judge_prompt_by_id(prompt_id)
+    if not prompt:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "Prompt not found."})
+    return prompt
+
+
+@router.get("/prompts/active/{grader_name}")
+async def get_active_prompt(grader_name: str):
+    """Get the currently active prompt for a grader. Returns null if using code default."""
+    from storage import queries
+    prompt = await queries.get_active_judge_prompt(grader_name)
+    return {"grader_name": grader_name, "prompt": prompt, "source": "db" if prompt else "code_default"}
+
+
+@router.post("/prompts")
+async def save_judge_prompt(body: SaveJudgePromptRequest):
+    """Save a new version of a judge prompt. Automatically becomes the active version.
+
+    Previous versions are kept (is_active=0) for history and rollback.
+    """
+    from storage import queries
+    result = await queries.save_judge_prompt(
+        grader_name=body.grader_name,
+        system_prompt=body.system_prompt,
+        few_shots=body.few_shots,
+        notes=body.notes,
+    )
+    return result
+
+
+@router.post("/prompts/seed")
+async def seed_judge_prompts():
+    """Seed DB with current hardcoded judge prompts (for first-time setup).
+
+    Only seeds graders that don't already have a DB prompt.
+    """
+    from storage import queries
+    from graders.llm_graders import (
+        _load_few_shots,
+    )
+
+    # Hardcoded default prompts — extracted from llm_graders.py
+    defaults = {
+        "rubric_compliance": {
+            "prompt": """You are an eval judge for a shopping research guide.
+
+## Task
+Evaluate the guide against specific scene rubrics. Determine: PASS or FAIL.
+
+## FAIL Definition
+Guide misses >30% of rubric requirements, OR addresses them only superficially without specific evidence (numbers, specs, comparisons).
+
+## PASS Definition
+Guide addresses 70%+ of scene rubric requirements with specific evidence (product names, specs, measurements, source citations).
+
+## Output Format
+Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
+Reasoning MUST list: (1) total rubric requirements, (2) how many addressed with evidence, (3) which are missing.""",
+        },
+        "groundedness": {
+            "prompt": """You are a groundedness evaluator for a shopping guide.
+
+## Task
+Identify factual claims in the guide and check whether each is supported by cited sources. Determine: PASS or FAIL.
+
+Note: You can only verify whether the source LIST contains relevant entries — you cannot access the actual source content. If a claim cites a source that appears in the list and the claim is plausible for that source type, treat it as grounded.
+
+## FAIL Definition
+<80% of factual claims grounded in cited sources, OR any critical claim (price, safety spec, compatibility) appears fabricated — contradicted by product data or absent from all sources.
+
+## PASS Definition
+80%+ of factual claims are grounded — either cited inline with a matching source, or consistent with product data. Minor unverified claims (subjective opinions, well-known facts) are acceptable.
+
+## Protocol
+1. Extract 10-15 factual claims (specs, prices, ratings, comparisons — NOT opinions)
+2. For each: check if a cited source or product data supports it
+3. Count: claims_grounded / claims_checked
+4. Check: are there any CRITICAL fabrications? (wrong price, wrong safety spec, wrong compatibility)
+   - A "critical fabrication" means the claim is CONTRADICTED by available data, not merely unverified
+   - An unverified claim with no contradicting evidence is NOT a critical fabrication
+5. Decision rule (MUST follow strictly):
+   - If grounded/checked >= 0.8 AND zero critical fabrications → result="Pass"
+   - If grounded/checked < 0.8 OR any critical fabrication exists → result="Fail"
+
+## Output Format
+Call `score_grader` with: grader_name="groundedness", result="Pass" or result="Fail", reasoning.
+Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) grounding_ratio: N%, (4) critical_fabrications: list or "none".""",
+        },
+        "actionability": {
+            "prompt": """You are an eval judge for a shopping research guide's purchase actionability.
+
+## Task
+Evaluate whether the guide enables the user to make a purchase decision. Determine: PASS or FAIL.
+
+## FAIL Definition
+No actionable purchase path — prices missing for most products (>50%), no purchase links or retailer names, OR only generic "search Amazon" without specifics.
+
+## PASS Definition
+User can make a purchase decision — at least 50% of recommended products have current prices AND where-to-buy info (specific links or retailer names with product identifiers).
+
+## Output Format
+Call `score_grader` with: grader_name="actionability", result="Pass" or result="Fail", reasoning.
+Reasoning MUST count: (1) products with prices: X/Y, (2) products with buy links: X/Y, (3) has audience segmentation: yes/no.""",
+        },
+        "trap_detection": {
+            "prompt": """You are an eval judge for trap/risk detection in a shopping guide.
+
+## Task
+Evaluate whether the guide correctly identifies a hidden trap/risk. Determine: PASS or FAIL.
+
+## FAIL Definition
+Guide recommends the product without mentioning the trap, OR only hints vaguely without explicit warning that a user would likely miss.
+
+## PASS Definition
+Guide explicitly identifies the hidden risk/trap AND explains consequences to the user. The warning must be clear enough that a reasonable reader would notice it.
+
+## Output Format
+Call `score_grader` with: grader_name="trap_detection", result="Pass" or result="Fail", reasoning.
+Reasoning MUST state: (1) was the risk mentioned? (2) how explicitly? (3) would a reader notice?""",
+        },
+    }
+
+    seeded = []
+    skipped = []
+    for grader_name, config in defaults.items():
+        existing = await queries.get_active_judge_prompt(grader_name)
+        if existing:
+            skipped.append(grader_name)
+            continue
+        few_shots = _load_few_shots(grader_name)
+        await queries.save_judge_prompt(
+            grader_name=grader_name,
+            system_prompt=config["prompt"],
+            few_shots=[],  # few_shots loaded from files at runtime
+            notes="Seeded from hardcoded defaults",
+        )
+        seeded.append(grader_name)
+
+    return {"seeded": seeded, "skipped": skipped}

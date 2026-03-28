@@ -272,6 +272,21 @@ def _build_operation_log(result: CollectedResult) -> str:
     return "\n".join(lines)
 
 
+# ── DB prompt override ────────────────────────────────────────────────
+
+async def _get_prompt_from_db(grader_name: str) -> str | None:
+    """Try to load the active judge prompt from DB. Returns None to use code default."""
+    try:
+        from storage import queries
+        prompt_data = await queries.get_active_judge_prompt(grader_name)
+        if prompt_data and prompt_data.get("system_prompt"):
+            logger.info(f"Judge prompt '{grader_name}' loaded from DB (v{prompt_data['version']})")
+            return prompt_data["system_prompt"]
+    except Exception as e:
+        logger.debug(f"DB prompt lookup failed for '{grader_name}': {e}")
+    return None
+
+
 # ── LLM Grader runner ────────────────────────────────────────────────
 
 async def _run_llm_grader(
@@ -280,7 +295,14 @@ async def _run_llm_grader(
     grader_name: str,
     weight: float,
 ) -> GraderResult | None:
-    """Run an LLM grader via the eval agent. Returns None on failure (logged)."""
+    """Run an LLM grader via the eval agent. Returns None on failure (logged).
+
+    Prompt priority: DB active prompt > code-provided system_prompt.
+    """
+    # Override prompt from DB if available
+    db_prompt = await _get_prompt_from_db(grader_name)
+    if db_prompt:
+        system_prompt = db_prompt
     try:
         from agent.eval_agent import run_eval_grader
         result = await run_eval_grader(system_prompt, user_message, grader_name)

@@ -120,6 +120,18 @@ _MIGRATIONS = [
         threshold_met INTEGER DEFAULT 0,
         created_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
     )""",
+    # Judge prompt management: evaluator prompts as data, not code
+    """CREATE TABLE IF NOT EXISTS judge_prompts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grader_name TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        system_prompt TEXT NOT NULL,
+        few_shots TEXT DEFAULT '[]',
+        is_active INTEGER DEFAULT 1,
+        notes TEXT DEFAULT '',
+        created_at REAL NOT NULL DEFAULT (strftime('%s', 'now')),
+        UNIQUE(grader_name, version)
+    )""",
 ]
 
 

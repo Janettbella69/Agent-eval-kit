@@ -1174,3 +1174,108 @@ async def get_review_stats() -> dict:
         "pending": p,
         "coverage_pct": round(r / max(t, 1) * 100, 1),
     }
+
+
+# ── Judge Prompt Management ─────────────────────
+
+async def get_active_judge_prompt(grader_name: str) -> dict | None:
+    """Get the active prompt for a grader. Returns None if not in DB (use code default)."""
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT id, grader_name, version, system_prompt, few_shots, notes, created_at
+           FROM judge_prompts
+           WHERE grader_name = ? AND is_active = 1
+           ORDER BY version DESC LIMIT 1""",
+        (grader_name,),
+    )
+    if not rows:
+        return None
+    r = rows[0]
+    return {
+        "id": r["id"],
+        "grader_name": r["grader_name"],
+        "version": r["version"],
+        "system_prompt": r["system_prompt"],
+        "few_shots": json.loads(r["few_shots"] or "[]"),
+        "notes": r["notes"] or "",
+        "created_at": r["created_at"],
+    }
+
+
+async def list_judge_prompts(grader_name: str | None = None) -> list[dict]:
+    """List all judge prompts, optionally filtered by grader."""
+    db = await get_db()
+    if grader_name:
+        rows = await db.execute_fetchall(
+            """SELECT id, grader_name, version, is_active, notes, created_at,
+                      LENGTH(system_prompt) as prompt_length
+               FROM judge_prompts WHERE grader_name = ? ORDER BY version DESC""",
+            (grader_name,),
+        )
+    else:
+        rows = await db.execute_fetchall(
+            """SELECT id, grader_name, version, is_active, notes, created_at,
+                      LENGTH(system_prompt) as prompt_length
+               FROM judge_prompts ORDER BY grader_name, version DESC""",
+        )
+    return [dict(r) for r in rows]
+
+
+async def save_judge_prompt(
+    grader_name: str,
+    system_prompt: str,
+    few_shots: list | None = None,
+    notes: str = "",
+) -> dict:
+    """Save a new version of a judge prompt. Deactivates previous versions."""
+    db = await get_db()
+
+    # Get next version number
+    rows = await db.execute_fetchall(
+        "SELECT MAX(version) as max_v FROM judge_prompts WHERE grader_name = ?",
+        (grader_name,),
+    )
+    next_version = (rows[0]["max_v"] or 0) + 1 if rows else 1
+
+    # Deactivate old versions
+    await db.execute(
+        "UPDATE judge_prompts SET is_active = 0 WHERE grader_name = ?",
+        (grader_name,),
+    )
+
+    # Insert new version
+    cursor = await db.execute(
+        """INSERT INTO judge_prompts (grader_name, version, system_prompt, few_shots, is_active, notes)
+           VALUES (?, ?, ?, ?, 1, ?)""",
+        (grader_name, next_version, system_prompt, json.dumps(few_shots or []), notes),
+    )
+    await db.commit()
+
+    return {
+        "id": cursor.lastrowid,
+        "grader_name": grader_name,
+        "version": next_version,
+    }
+
+
+async def get_judge_prompt_by_id(prompt_id: int) -> dict | None:
+    """Get a specific judge prompt by ID (for viewing/editing any version)."""
+    db = await get_db()
+    rows = await db.execute_fetchall(
+        """SELECT id, grader_name, version, system_prompt, few_shots, is_active, notes, created_at
+           FROM judge_prompts WHERE id = ?""",
+        (prompt_id,),
+    )
+    if not rows:
+        return None
+    r = rows[0]
+    return {
+        "id": r["id"],
+        "grader_name": r["grader_name"],
+        "version": r["version"],
+        "system_prompt": r["system_prompt"],
+        "few_shots": json.loads(r["few_shots"] or "[]"),
+        "is_active": bool(r["is_active"]),
+        "notes": r["notes"] or "",
+        "created_at": r["created_at"],
+    }
