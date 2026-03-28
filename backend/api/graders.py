@@ -178,6 +178,73 @@ async def save_judge_prompt(body: SaveJudgePromptRequest):
     return result
 
 
+@router.post("/prompts/{prompt_id}/activate")
+async def activate_prompt_version(prompt_id: int):
+    """Rollback: re-activate a previous prompt version.
+
+    Deactivates the current active version for this grader and activates the specified one.
+    """
+    from storage import queries
+    prompt = await queries.get_judge_prompt_by_id(prompt_id)
+    if not prompt:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "Prompt not found."})
+
+    db = await queries.get_db()
+    # Deactivate all versions of this grader
+    await db.execute(
+        "UPDATE judge_prompts SET is_active = 0 WHERE grader_name = ?",
+        (prompt["grader_name"],),
+    )
+    # Activate the specified version
+    await db.execute(
+        "UPDATE judge_prompts SET is_active = 1 WHERE id = ?",
+        (prompt_id,),
+    )
+    await db.commit()
+
+    return {
+        "ok": True,
+        "grader_name": prompt["grader_name"],
+        "activated_version": prompt["version"],
+    }
+
+
+@router.get("/prompts/diff")
+async def diff_prompt_versions(id_a: int, id_b: int):
+    """Compare two prompt versions side-by-side.
+
+    Returns both prompts with a line-level diff summary.
+    """
+    from storage import queries
+    a = await queries.get_judge_prompt_by_id(id_a)
+    b = await queries.get_judge_prompt_by_id(id_b)
+    if not a or not b:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "One or both prompts not found."})
+
+    import difflib
+    diff_lines = list(difflib.unified_diff(
+        a["system_prompt"].splitlines(keepends=True),
+        b["system_prompt"].splitlines(keepends=True),
+        fromfile=f"{a['grader_name']} v{a['version']}",
+        tofile=f"{b['grader_name']} v{b['version']}",
+        n=3,
+    ))
+
+    added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
+
+    return {
+        "a": {"id": a["id"], "grader_name": a["grader_name"], "version": a["version"],
+               "is_active": a["is_active"], "system_prompt": a["system_prompt"]},
+        "b": {"id": b["id"], "grader_name": b["grader_name"], "version": b["version"],
+               "is_active": b["is_active"], "system_prompt": b["system_prompt"]},
+        "diff": "".join(diff_lines),
+        "stats": {"added": added, "removed": removed, "changed": added + removed > 0},
+    }
+
+
 @router.post("/prompts/seed")
 async def seed_judge_prompts():
     """Seed DB with current hardcoded judge prompts (for first-time setup).

@@ -274,17 +274,20 @@ def _build_operation_log(result: CollectedResult) -> str:
 
 # ── DB prompt override ────────────────────────────────────────────────
 
-async def _get_prompt_from_db(grader_name: str) -> str | None:
-    """Try to load the active judge prompt from DB. Returns None to use code default."""
+async def _get_prompt_from_db(grader_name: str) -> tuple[str | None, int]:
+    """Try to load the active judge prompt from DB.
+
+    Returns (prompt_text, version). (None, 0) means use code default.
+    """
     try:
         from storage import queries
         prompt_data = await queries.get_active_judge_prompt(grader_name)
         if prompt_data and prompt_data.get("system_prompt"):
             logger.info(f"Judge prompt '{grader_name}' loaded from DB (v{prompt_data['version']})")
-            return prompt_data["system_prompt"]
+            return prompt_data["system_prompt"], prompt_data["version"]
     except Exception as e:
         logger.debug(f"DB prompt lookup failed for '{grader_name}': {e}")
-    return None
+    return None, 0
 
 
 # ── LLM Grader runner ────────────────────────────────────────────────
@@ -299,8 +302,8 @@ async def _run_llm_grader(
 
     Prompt priority: DB active prompt > code-provided system_prompt.
     """
-    # Override prompt from DB if available
-    db_prompt = await _get_prompt_from_db(grader_name)
+    # Override prompt from DB if available; track version for traceability
+    db_prompt, prompt_version = await _get_prompt_from_db(grader_name)
     if db_prompt:
         system_prompt = db_prompt
     try:
@@ -317,6 +320,8 @@ async def _run_llm_grader(
         details["reasoning"] = reasoning
         details["verdict"] = verdict  # Binary Pass/Fail verdict
         details["system_prompt"] = system_prompt  # For judge prompt traceability
+        details["prompt_version"] = prompt_version  # 0 = code default, N = DB version
+        details["prompt_source"] = "db" if prompt_version > 0 else "code"
         details["num_turns"] = result.get("num_turns", 0)
 
         # Store self-correction metadata
