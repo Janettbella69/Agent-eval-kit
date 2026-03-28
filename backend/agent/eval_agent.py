@@ -21,11 +21,97 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ResultMessage,
     ThinkingConfigAdaptive,
+    HookMatcher,
 )
 
 logger = logging.getLogger(__name__)
 
 from agent.tools import create_eval_tools_server, init_scores, get_scores
+
+
+# ── Eval Agent Hooks (Harness Engineering) ────────────────────────────
+#
+# Hooks prevent the eval agent from making known mistakes:
+# 1. Stop: if agent finishes without calling score_grader → force a verdict
+# 2. PreToolUse(score_grader): validate verdict format before accepting
+# 3. PostToolUseFailure: log and guide agent to retry
+
+async def _on_eval_stop(input_data: dict, tool_use_id, context) -> dict:
+    """Stop hook: detect when agent finishes without scoring.
+
+    If no score_grader call was made, inject a system message forcing
+    the agent to make a decision. This is the #1 eval agent failure mode.
+    """
+    scores = get_scores()
+    if not scores:
+        logger.warning("Eval agent Stop hook: no score recorded — injecting reminder")
+        return {
+            "systemMessage": (
+                "CRITICAL: You have NOT called score_grader yet. "
+                "You MUST call score_grader before finishing. "
+                "Based on your analysis so far, make your best judgment and call "
+                "score_grader with result='Pass' or result='Fail' and your reasoning."
+            ),
+            "stopReason": "tool_use",  # Force agent to continue
+        }
+    return {}
+
+
+async def _on_eval_pre_score(input_data: dict, tool_use_id, context) -> dict:
+    """PreToolUse(score_grader): validate the verdict before accepting."""
+    tool_input = input_data.get("tool_input", {})
+    result = str(tool_input.get("result", "")).strip().lower()
+    reasoning = str(tool_input.get("reasoning", "")).strip()
+
+    if result not in ("pass", "fail", "true", "false", "yes", "no"):
+        return {
+            "systemMessage": (
+                f"Invalid verdict '{result}'. Use result='Pass' or result='Fail'. "
+                "Call score_grader again with a valid verdict."
+            ),
+        }
+
+    if len(reasoning) < 10:
+        return {
+            "systemMessage": (
+                "Reasoning is too brief. Provide at least 1-2 sentences explaining "
+                "your verdict with specific evidence. Call score_grader again."
+            ),
+        }
+
+    return {}
+
+
+async def _on_eval_tool_failure(input_data: dict, tool_use_id, context) -> dict:
+    """PostToolUseFailure: guide agent to retry or skip verification."""
+    tool_name = input_data.get("tool_name", "")
+    error = input_data.get("error", "")
+    return {
+        "systemMessage": (
+            f"Tool '{tool_name}' failed: {str(error)[:100]}. "
+            "This is not critical — proceed with your evaluation based on "
+            "available information. Call score_grader with your verdict."
+        ),
+    }
+
+
+def _get_eval_hooks() -> dict:
+    """Build hooks config for the eval agent."""
+    return {
+        "Stop": [
+            HookMatcher(hooks=[_on_eval_stop]),
+        ],
+        "PreToolUse": [
+            HookMatcher(
+                matcher="mcp__eval-tools__score_grader",
+                hooks=[_on_eval_pre_score],
+                timeout=10,
+            ),
+        ],
+        "PostToolUseFailure": [
+            HookMatcher(hooks=[_on_eval_tool_failure]),
+        ],
+    }
 from config import (
     GRADING_MODEL,
     JUDGE_PRESET,
@@ -165,6 +251,7 @@ def _build_options(
         allowed_tools=allowed_tools,
         mcp_servers={"eval-tools": tools_server},
         thinking=ThinkingConfigAdaptive(type="adaptive"),
+        hooks=_get_eval_hooks(),
     )
 
 
