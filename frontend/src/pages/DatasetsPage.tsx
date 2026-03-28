@@ -111,6 +111,9 @@ export default function DatasetsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Datasets</h1>
         <div className="flex flex-wrap gap-2">
+          <Link to="/datasets/create" className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+            + 新建评测集
+          </Link>
           <button
             onClick={handleImportShoppingComp}
             disabled={importing}

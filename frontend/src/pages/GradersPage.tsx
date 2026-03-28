@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { listExperiments, getValidationSummary, validateGrader, listJudgePrompts, getJudgePrompt, saveJudgePrompt, activatePromptVersion, diffPromptVersions, seedJudgePrompts } from '../lib/api.ts'
 import type { Experiment } from '../types.ts'
 import type { ValidationSummary, JudgePromptListItem, JudgePrompt } from '../lib/api.ts'
@@ -89,7 +90,11 @@ export default function GradersPage() {
           <h1 className="text-2xl font-bold text-slate-900">评分器</h1>
           <p className="text-sm text-slate-400 mt-1">评分器配置、权重、表现、校准和 Prompt 管理</p>
         </div>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+        <div className="flex items-center gap-3">
+          <Link to="/graders/create" className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+            + 新建评估器
+          </Link>
+          <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
@@ -106,6 +111,7 @@ export default function GradersPage() {
           >
             Prompt 管理
           </button>
+          </div>
         </div>
       </div>
 

@@ -95,6 +95,13 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
       ],
     },
     {
+      key: 'observe',
+      label: '观测',
+      items: [
+        { path: '/traces', label: 'Trace', icon: 'timeline' },
+      ],
+    },
+    {
       key: 'analysis',
       label: '分析',
       items: [
