@@ -10,6 +10,10 @@ import OverviewPage from './pages/OverviewPage.tsx'
 import AnalyzePage from './pages/AnalyzePage.tsx'
 import ComparePage from './pages/ComparePage.tsx'
 import TracePage from './pages/TracePage.tsx'
+import CreateDatasetPage from './pages/CreateDatasetPage.tsx'
+import CreateEvaluatorPage from './pages/CreateEvaluatorPage.tsx'
+import CreateExperimentPage from './pages/CreateExperimentPage.tsx'
+import TraceListPage from './pages/TraceListPage.tsx'
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -33,15 +37,19 @@ export default function App() {
             <Route path="/experiments" element={<ExperimentsPage />} />
             <Route path="/experiments/:id" element={<ExperimentPage />} />
             <Route path="/datasets" element={<DatasetsPage />} />
+            <Route path="/datasets/create" element={<CreateDatasetPage />} />
             <Route path="/datasets/:id" element={<DatasetDetailPage />} />
             <Route path="/graders" element={<GradersPage />} />
+            <Route path="/graders/create" element={<CreateEvaluatorPage />} />
+            <Route path="/experiments/create" element={<CreateExperimentPage />} />
 
             {/* 分析 */}
             <Route path="/overview" element={<OverviewPage />} />
             <Route path="/analysis" element={<AnalyzePage />} />
             <Route path="/compare" element={<ComparePage />} />
 
-            {/* Detail */}
+            {/* 观测 */}
+            <Route path="/traces" element={<TraceListPage />} />
             <Route path="/traces/:id" element={<TracePage />} />
           </Routes>
         </div>
