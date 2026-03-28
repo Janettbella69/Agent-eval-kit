@@ -14,7 +14,7 @@ import './styles/global.css'
 export default function App() {
   return (
     <ConfigProvider theme={antdTheme}>
-      <BrowserRouter>
+      <BrowserRouter basename="/eval">
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/playground" replace />} />

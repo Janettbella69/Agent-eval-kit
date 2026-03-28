@@ -8,7 +8,14 @@ body {
   background: #FDFDFD;
   color: #1F2430;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
+
+/* Ant Design overrides for cleaner look */
+.ant-card { box-shadow: none !important; }
+.ant-empty-description { color: #8F96A3 !important; }
+.ant-alert { font-size: 13px !important; }
 
 .headline-font {
   font-family: 'Manrope', 'Inter', sans-serif;

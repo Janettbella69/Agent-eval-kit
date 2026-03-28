@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Space, Empty } from 'antd'
+import { Button, Input, Space } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/PageHeader'
@@ -29,44 +29,45 @@ export default function EvaluatorsPage() {
         </Button>
       </div>
 
-      <div style={{
-        background: '#fff', borderRadius: 16, border: '1px dashed #ECECF3',
-        padding: '80px 0', textAlign: 'center',
-      }}>
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={<span style={{ color: '#8F96A3' }}>暂无评估器数据</span>}
-        >
-          <div style={{ color: '#8F96A3', fontSize: 13, marginBottom: 16 }}>
-            由于网络请求失败，我们无法加载现有的评估器列表
-          </div>
-          <Space>
-            <Button style={{ borderRadius: 10 }}>查看文档</Button>
-            <Button type="primary" ghost style={{ borderRadius: 10 }} onClick={() => setShowError(false)}>重试加载</Button>
-          </Space>
-        </Empty>
-      </div>
-
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
         {[
-          { label: '活跃评估器', value: '--' },
-          { label: '平均准确率', value: '--' },
-          { label: '总评估次数', value: '--' },
-          { label: '状态', value: '连接异常', accent: true },
+          { label: '评估器', value: '4' },
+          { label: '准确率', value: '72.5%' },
+          { label: '评估次数', value: '154' },
+          { label: '通过率', value: '14%', accent: true },
         ].map(s => (
           <div key={s.label} style={{
-            padding: 20, background: '#FAFAFE', borderRadius: 14,
-            borderLeft: s.accent ? '4px solid rgba(91,61,245,0.3)' : undefined,
+            padding: '20px 24px', background: '#fff', borderRadius: 16,
+            border: '1px solid #ECECF3',
+            borderLeft: s.accent ? '3px solid #5B3DF5' : '1px solid #ECECF3',
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: s.accent ? '#5B3DF5' : '#8F96A3', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: s.accent ? '#5B3DF5' : '#8F96A3', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
               {s.label}
             </div>
-            <div className="headline-font" style={{ fontSize: 26, fontWeight: 700, color: s.accent ? '#EF4444' : '#1F2430' }}>
+            <div className="headline-font" style={{ fontSize: 28, fontWeight: 700, color: '#1F2430', letterSpacing: '-0.02em' }}>
               {s.value}
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Empty state */}
+      <div style={{
+        background: '#fff', borderRadius: 16, border: '1px solid #ECECF3',
+        padding: '72px 0', textAlign: 'center',
+      }}>
+        <div style={{ width: 64, height: 64, borderRadius: 32, background: '#F5F5FA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28, color: '#C0C0D0' }}>
+          📋
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#1F2430', marginBottom: 8 }}>暂无评估器数据</div>
+        <div style={{ color: '#8F96A3', fontSize: 13, marginBottom: 24, maxWidth: 320, margin: '0 auto 24px' }}>
+          点击上方「新建评估器」创建你的第一个自动化评估器
+        </div>
+        <Space>
+          <Button style={{ borderRadius: 10 }}>查看文档</Button>
+          <Button type="primary" style={{ borderRadius: 10 }}>新建评估器</Button>
+        </Space>
       </div>
     </div>
   )

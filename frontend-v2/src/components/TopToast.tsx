@@ -9,8 +9,8 @@ interface TopToastProps {
 export default function TopToast({ message, type = 'error', onClose }: TopToastProps) {
   return (
     <div style={{
-      position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
-      zIndex: 1000, minWidth: 360, maxWidth: 600,
+      position: 'fixed', top: 16, right: 32, left: 'auto', transform: 'none',
+      zIndex: 1000, minWidth: 280, maxWidth: 420,
     }}>
       <Alert
         message={message}

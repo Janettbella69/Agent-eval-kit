@@ -1,4 +1,4 @@
-import { Button, Input, Select, Space, Empty } from 'antd'
+import { Button, Input, Select, Space } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/PageHeader'
@@ -31,13 +31,19 @@ export default function DatasetsPage() {
 
       {/* Empty state */}
       <div style={{
-        background: '#fff', borderRadius: 16, border: '1px dashed #ECECF3',
-        padding: '80px 0', textAlign: 'center',
+        background: '#fff', borderRadius: 16, border: '1px solid #ECECF3',
+        padding: '72px 0', textAlign: 'center',
       }}>
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={<span style={{ color: '#8F96A3' }}>暂无评测集，点击右上角创建第一个</span>}
-        />
+        <div style={{ width: 64, height: 64, borderRadius: 32, background: '#F5F5FA', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>
+          📂
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#1F2430', marginBottom: 8 }}>暂无评测集</div>
+        <div style={{ color: '#8F96A3', fontSize: 13, maxWidth: 300, margin: '0 auto 24px' }}>
+          评测集用于管理测试用例和 golden data
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/evaluation/datasets/create')} style={{ borderRadius: 10 }}>
+          创建第一个评测集
+        </Button>
       </div>
     </div>
   )
