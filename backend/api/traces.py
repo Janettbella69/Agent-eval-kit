@@ -13,6 +13,7 @@ GET    /api/traces/analyze/{request_id}  Poll AI analysis result
 GET    /api/traces/review-queue  Sample traces for transcript review
 POST   /api/traces/{id}/review   Update review status
 GET    /api/traces/review-stats  Review coverage statistics
+POST   /api/traces/{id}/to_case  Convert trace → reusable test case with human verdict
 """
 
 import asyncio
@@ -39,6 +40,12 @@ class AnnotateGraderRequest(BaseModel):
 
 class AnnotateHumanPassRequest(BaseModel):
     passed: bool
+
+
+class TraceToTestCaseRequest(BaseModel):
+    verdict: str = ""           # "pass" or "fail" — human ground truth
+    dataset_name: str = ""      # target dataset (default: "human-curated")
+    notes: str = ""             # optional reviewer notes
 
 
 # ── Endpoints ───────────────────────────────────
@@ -660,4 +667,101 @@ async def get_trace_logs(trace_id: int):
         "grading_log": trace.grading_log,
         "grading_duration_s": trace.grading_duration_s,
         "human_scores": trace.human_scores,
+    }
+
+
+# ── Trace → Test Case ────────────────────────────
+
+CURATED_DATASET_NAME = "human-curated"
+
+@router.post("/{trace_id}/to_case")
+async def trace_to_test_case(trace_id: int, body: TraceToTestCaseRequest):
+    """Convert a production trace into a reusable test case with human ground truth.
+
+    Creates/reuses a "human-curated" dataset (or custom name), inserts the trace's
+    query as a case, and stores the trace's output as reference_output + golden_data.
+    If verdict is provided, also annotates human_pass on the trace.
+
+    This is the key bridge between observability and evaluation:
+    production trace → curated test case → judge validation.
+    """
+    trace = await queries.get_trace(trace_id)
+    if not trace:
+        return JSONResponse(status_code=404, content={"detail": "Trace not found."})
+
+    if not trace.query:
+        return JSONResponse(status_code=422, content={"detail": "Trace has no query."})
+
+    # Get or create target dataset
+    ds_name = body.dataset_name.strip() or CURATED_DATASET_NAME
+    dataset = await queries.get_dataset_by_name(ds_name)
+    if dataset:
+        dataset_id = dataset.id
+    else:
+        dataset_id = await queries.create_dataset(
+            name=ds_name,
+            description="Human-curated test cases from production traces",
+            suite_type="capability",
+        )
+
+    # Build golden_data from trace output (products, sources as reference)
+    import json
+    products = trace.products if isinstance(trace.products, list) else []
+    sources = trace.sources if isinstance(trace.sources, list) else []
+
+    golden_data = {}
+    if products:
+        golden_data["product_list"] = [
+            {"product_name": p.get("name", "") if isinstance(p, dict) else str(p)}
+            for p in products[:10]
+        ]
+
+    # Build reference_output (full agent output for comparison)
+    reference_output = {
+        "guide_text": trace.guide_text[:15000] if trace.guide_text else "",
+        "product_count": len(products),
+        "source_count": len(sources),
+        "duration_s": trace.duration_s,
+    }
+
+    # Case key: use trace's case_key or generate from query
+    import hashlib
+    case_key = trace.case_key or f"curated-{hashlib.md5(trace.query.encode()).hexdigest()[:8]}"
+
+    # Upsert case
+    case_id = await queries.upsert_case(
+        dataset_id=dataset_id,
+        key=case_key,
+        query=trace.query,
+        case_type=trace.case_type or "production",
+        constraints={},
+        golden_data=golden_data,
+        reference_output=reference_output,
+    )
+
+    # If verdict provided, annotate human_pass on the trace
+    verdict_recorded = False
+    if body.verdict.lower() in ("pass", "fail"):
+        human_pass = body.verdict.lower() == "pass"
+        await queries.update_trace(trace_id, human_pass=human_pass)
+        verdict_recorded = True
+
+    # Store notes as open code if provided
+    if body.notes:
+        existing_codes = list(trace.open_codes) if trace.open_codes else []
+        note_code = f"curator_note:{body.notes[:200]}"
+        if note_code not in existing_codes:
+            existing_codes.append(note_code)
+            await queries.update_trace(trace_id, open_codes=existing_codes)
+
+    await queries.bump_dataset_version(dataset_id)
+
+    return {
+        "ok": True,
+        "dataset_id": dataset_id,
+        "dataset_name": ds_name,
+        "case_id": case_id,
+        "case_key": case_key,
+        "verdict_recorded": verdict_recorded,
+        "trace_id": trace_id,
     }
