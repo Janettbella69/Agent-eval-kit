@@ -183,6 +183,20 @@ export const updateReviewStatus = (traceId: number, status: string, notes: strin
 
 export const getReviewStats = () => fetchJSON<ReviewStats>('/traces/review-stats')
 
+// Trace List (all traces across experiments)
+export interface TraceListItem {
+  id: number; experiment_id: number; case_key: string; trial_num: number
+  query: string; case_type: string; status: string; duration_s: number
+  final_score: number; final_pass: boolean; human_pass: boolean | null
+  guide_length: number; product_count: number; source_count: number
+  input_tokens: number; output_tokens: number; model: string; created_at: number
+}
+export const listAllTraces = (limit: number = 100, status: string = '') => {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (status) params.set('status', status)
+  return fetchJSON<{ traces: TraceListItem[]; total: number }>(`/traces/list?${params}`)
+}
+
 // Trace → Test Case
 export const traceToTestCase = (traceId: number, verdict: string = '', datasetName: string = '', notes: string = '') =>
   fetchJSON<{ ok: boolean; dataset_id: number; dataset_name: string; case_key: string; verdict_recorded: boolean }>(

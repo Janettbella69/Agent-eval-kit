@@ -52,6 +52,47 @@ class TraceToTestCaseRequest(BaseModel):
 
 # ── Fixed paths MUST be before /{trace_id} to avoid path param conflict ──
 
+@router.get("/list")
+async def list_traces(limit: int = 100, status: str = ""):
+    """List recent traces across all experiments."""
+    db = await queries.get_db()
+    where = "WHERE 1=1"
+    params: list = []
+    if status:
+        where += " AND t.status = ?"
+        params.append(status)
+    rows = await db.execute_fetchall(
+        f"""SELECT t.id, t.experiment_id, t.case_key, t.trial_num, t.query,
+                   t.case_type, t.status, t.duration_s, t.final_score, t.final_pass,
+                   t.human_pass, LENGTH(t.guide_text) as guide_length,
+                   t.products, t.sources, t.input_tokens, t.output_tokens,
+                   t.model, t.created_at
+            FROM traces t {where}
+            ORDER BY t.id DESC LIMIT ?""",
+        (*params, limit),
+    )
+    import json
+    traces = []
+    for r in rows:
+        products = json.loads(r["products"] or "[]")
+        sources = json.loads(r["sources"] or "[]")
+        traces.append({
+            "id": r["id"], "experiment_id": r["experiment_id"],
+            "case_key": r["case_key"], "trial_num": r["trial_num"],
+            "query": r["query"], "case_type": r["case_type"],
+            "status": r["status"], "duration_s": r["duration_s"],
+            "final_score": r["final_score"], "final_pass": bool(r["final_pass"]),
+            "human_pass": r["human_pass"], "guide_length": r["guide_length"] or 0,
+            "product_count": len(products) if isinstance(products, list) else 0,
+            "source_count": len(sources) if isinstance(sources, list) else 0,
+            "input_tokens": r["input_tokens"] or 0,
+            "output_tokens": r["output_tokens"] or 0,
+            "model": r["model"] or "",
+            "created_at": r["created_at"],
+        })
+    return {"traces": traces, "total": len(traces)}
+
+
 @router.get("/alignment")
 async def get_judge_alignment():
     """Compute TPR/TNR of auto grading vs human PASS/FAIL labels.

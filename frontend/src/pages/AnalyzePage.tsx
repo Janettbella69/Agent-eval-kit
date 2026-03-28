@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { listExperiments, getExperiment } from '../lib/api.ts'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { listExperiments, getExperiment, startTraceAnalysis, getAnalysisResult } from '../lib/api.ts'
 import type { Experiment, Trace } from '../types.ts'
 
 export default function AnalyzePage() {
@@ -311,6 +313,8 @@ export default function AnalyzePage() {
               </tbody>
             </table>
           </div>
+          {/* AI Analysis Chat */}
+          <AIAnalysisChat traceIds={allTraces.map(t => t.id)} />
         </>
       )}
     </div>
@@ -347,6 +351,73 @@ function FunnelDistChart({ dist, total }: { dist: Record<string, number>; total:
           </div>
         )
       })}
+    </div>
+  )
+}
+
+
+/* ── AI Analysis Chat ── */
+
+function AIAnalysisChat({ traceIds }: { traceIds: number[] }) {
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleAsk = useCallback(async () => {
+    if (!question.trim() || traceIds.length === 0) return
+    setLoading(true)
+    setAnswer('')
+    try {
+      const { request_id } = await startTraceAnalysis(traceIds.slice(0, 5), question)
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 2000))
+        const result = await getAnalysisResult(request_id)
+        if (result.status === 'done') { setAnswer(result.result || 'No result.'); break }
+        if (result.status === 'error') { setAnswer(`Error: ${result.error || 'Unknown'}`); break }
+      }
+      if (!answer) setAnswer('Timeout.')
+    } catch (e) {
+      setAnswer(`Failed: ${e instanceof Error ? e.message : 'unknown'}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [question, traceIds, answer])
+
+  return (
+    <div className="rounded-xl bg-white border border-slate-200 p-5">
+      <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <span className="material-symbols-outlined text-emerald-600" style={{ fontSize: '18px' }}>auto_awesome</span>
+        AI 分析
+      </h3>
+      {!answer && !loading && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {['为什么通过率低？', '最常见的失败模式？', '搜索策略有什么问题？', '哪些产品类别最差？'].map(s => (
+            <button key={s} onClick={() => setQuestion(s)}
+              className="px-3 py-1.5 rounded-lg bg-slate-50 text-xs text-slate-600 hover:bg-slate-100 transition-colors">{s}</button>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2 mb-4">
+        <input value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAsk()}
+          placeholder="输入问题，AI 将分析选定的 traces..."
+          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400 outline-none"
+          disabled={loading || traceIds.length === 0} />
+        <button onClick={handleAsk} disabled={loading || !question.trim() || traceIds.length === 0}
+          className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+          {loading ? '分析中...' : '分析'}
+        </button>
+      </div>
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-slate-400 py-4">
+          <span className="material-symbols-outlined animate-spin" style={{ fontSize: '16px' }}>progress_activity</span>
+          GPT-5.4 正在分析 {traceIds.length} 条 traces...
+        </div>
+      )}
+      {answer && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 prose prose-slate prose-sm max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+        </div>
+      )}
     </div>
   )
 }
