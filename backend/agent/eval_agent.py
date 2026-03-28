@@ -20,6 +20,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     ClaudeAgentOptions,
     ResultMessage,
+    ThinkingConfigAdaptive,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,13 +153,18 @@ def _build_options(
         allowed_tools = base_tools
         max_turns = 10 if is_l2 else JUDGE_MAX_TURNS_BASIC
 
+    # Fallback model: if GRADING_MODEL fails, try a cheaper alternative
+    fallback = os.getenv("GRADING_FALLBACK_MODEL", "minimax/minimax-m2.7-highspeed")
+
     return ClaudeAgentOptions(
         system_prompt=system_prompt,
         model=GRADING_MODEL,
+        fallback_model=fallback,
         max_turns=max_turns,
         permission_mode="bypassPermissions",
         allowed_tools=allowed_tools,
         mcp_servers={"eval-tools": tools_server},
+        thinking=ThinkingConfigAdaptive(type="adaptive"),
     )
 
 
