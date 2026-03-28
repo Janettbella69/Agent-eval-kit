@@ -182,3 +182,51 @@ export const updateReviewStatus = (traceId: number, status: string, notes: strin
   })
 
 export const getReviewStats = () => fetchJSON<ReviewStats>('/traces/review-stats')
+
+// Trace → Test Case
+export const traceToTestCase = (traceId: number, verdict: string = '', datasetName: string = '', notes: string = '') =>
+  fetchJSON<{ ok: boolean; dataset_id: number; dataset_name: string; case_key: string; verdict_recorded: boolean }>(
+    `/traces/${traceId}/to_case`,
+    { method: 'POST', body: JSON.stringify({ verdict, dataset_name: datasetName, notes }) },
+  )
+
+// Judge Prompt Management
+export interface JudgePrompt {
+  id: number
+  grader_name: string
+  version: number
+  system_prompt: string
+  few_shots: unknown[]
+  is_active: boolean
+  notes: string
+  created_at: number
+}
+export interface JudgePromptListItem {
+  id: number
+  grader_name: string
+  version: number
+  is_active: number
+  notes: string
+  created_at: number
+  prompt_length: number
+}
+export const listJudgePrompts = (graderName?: string) => {
+  const params = graderName ? `?grader_name=${graderName}` : ''
+  return fetchJSON<JudgePromptListItem[]>(`/graders/prompts${params}`)
+}
+export const getJudgePrompt = (id: number) =>
+  fetchJSON<JudgePrompt>(`/graders/prompts/${id}`)
+export const getActivePrompt = (graderName: string) =>
+  fetchJSON<{ grader_name: string; prompt: JudgePrompt | null; source: string }>(`/graders/prompts/active/${graderName}`)
+export const saveJudgePrompt = (graderName: string, systemPrompt: string, notes: string = '') =>
+  fetchJSON<{ id: number; grader_name: string; version: number }>('/graders/prompts', {
+    method: 'POST', body: JSON.stringify({ grader_name: graderName, system_prompt: systemPrompt, notes }),
+  })
+export const activatePromptVersion = (promptId: number) =>
+  fetchJSON<{ ok: boolean; grader_name: string; activated_version: number }>(`/graders/prompts/${promptId}/activate`, { method: 'POST' })
+export const diffPromptVersions = (idA: number, idB: number) =>
+  fetchJSON<{ a: JudgePrompt; b: JudgePrompt; diff: string; stats: { added: number; removed: number; changed: boolean } }>(
+    `/graders/prompts/diff?id_a=${idA}&id_b=${idB}`,
+  )
+export const seedJudgePrompts = () =>
+  fetchJSON<{ seeded: string[]; skipped: string[] }>('/graders/prompts/seed', { method: 'POST' })

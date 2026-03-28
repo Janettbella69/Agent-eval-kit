@@ -9,7 +9,7 @@ import TraceTimeline from '../components/TraceTimeline.tsx'
 import FailureFunnel from '../components/FailureFunnel.tsx'
 import type { Trace, GradingLogEntry, AnalysisResult } from '../types.ts'
 
-type TabKey = 'guide' | 'products' | 'sources' | 'events' | 'scores' | 'logs' | 'config' | 'rubric' | 'codes' | 'ai'
+type TabKey = 'guide' | 'products' | 'sources' | 'events' | 'tools' | 'scores' | 'logs' | 'config' | 'rubric' | 'codes' | 'ai'
 
 export default function TracePage() {
   const { id } = useParams<{ id: string }>()
@@ -25,7 +25,8 @@ export default function TracePage() {
   if (loading) return <div className="text-slate-400">Loading...</div>
   if (!trace) return <div className="text-red-500">Trace not found.</div>
 
-  const tabs: TabKey[] = ['guide', 'products', 'sources', 'events', 'scores', 'logs', 'config', 'codes', 'ai']
+  const toolHistory = (trace.hook_metrics as Record<string, unknown>)?.tool_call_history as Array<{tool: string; args: Record<string, string>; ts: number; seq: number}> | undefined
+  const tabs: TabKey[] = ['guide', 'products', 'sources', 'events', 'tools', 'scores', 'logs', 'config', 'codes', 'ai']
   if (trace.case_type === 'shoppingcomp' || trace.case_type === 'trap') {
     tabs.push('rubric')
   }
@@ -101,6 +102,7 @@ export default function TracePage() {
             {t === 'products' && ` (${trace.products.length})`}
             {t === 'sources' && ` (${trace.sources.length})`}
             {t === 'events' && ` (${trace.events.length})`}
+            {t === 'tools' && toolHistory && ` (${toolHistory.length})`}
             {t === 'logs' && trace.grading_log.length > 0 && ` (${trace.grading_log.length})`}
             {t === 'codes' && trace.open_codes && trace.open_codes.length > 0 && ` (${trace.open_codes.length})`}
           </button>
@@ -179,6 +181,52 @@ export default function TracePage() {
           )}
 
           {tab === 'events' && <TraceTimeline events={trace.events} />}
+
+          {tab === 'tools' && (
+            <div className="rounded-xl bg-white border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-slate-700">Tool Call History</h4>
+                <span className="text-xs text-slate-400">{toolHistory?.length ?? 0} calls</span>
+              </div>
+              {toolHistory && toolHistory.length > 0 ? (
+                <div className="divide-y divide-slate-100/80">
+                  {toolHistory.map((call, i) => (
+                    <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50/50">
+                      <span className="text-[10px] text-slate-400 tabular-nums w-5 pt-0.5 text-right shrink-0">
+                        {call.seq}
+                      </span>
+                      <span className={`text-xs font-mono font-medium px-1.5 py-0.5 rounded shrink-0 ${
+                        call.tool.includes('WebSearch') || call.tool.includes('brave') || call.tool.includes('exa')
+                          ? 'bg-blue-50 text-blue-700'
+                          : call.tool.includes('WebFetch') || call.tool.includes('firecrawl')
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : call.tool.includes('serpapi')
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {call.tool.replace('mcp__', '').replace('__', ':')}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        {call.args.query && (
+                          <div className="text-sm text-slate-700 truncate">{call.args.query}</div>
+                        )}
+                        {call.args.url && (
+                          <div className="text-xs text-blue-600 truncate">{call.args.url}</div>
+                        )}
+                        {!call.args.query && !call.args.url && (
+                          <div className="text-xs text-slate-400 italic">no args</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-sm">
+                  No tool call history. Run a new trace to capture tool calls.
+                </div>
+              )}
+            </div>
+          )}
 
           {tab === 'scores' && <ScoresTab trace={trace} />}
 
@@ -1358,35 +1406,20 @@ function RubricTab({ trace }: { trace: Trace }) {
 
 function SaveToDatasetButton({ trace }: { trace: Trace }) {
   const [open, setOpen] = useState(false)
-  const [datasets, setDatasets] = useState<Array<{ id: number; name: string }>>([])
-  const [selectedId, setSelectedId] = useState<number>(0)
+  const [verdict, setVerdict] = useState<string>('')
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [result, setResult] = useState<string>('')
 
-  const handleOpen = async () => {
-    setOpen(true)
-    const ds = await listDatasets()
-    setDatasets(ds)
-    if (ds.length > 0) setSelectedId(ds[0].id)
-  }
-
-  const handleSave = async () => {
-    if (!selectedId) return
+  const handleSave = async (v: string) => {
     setSaving(true)
+    setVerdict(v)
     try {
-      await backflowTrace(selectedId, {
-        query: trace.query,
-        guide_text: trace.guide_text,
-        products: trace.products,
-        sources: trace.sources,
-        events: trace.events,
-        hook_metrics: trace.hook_metrics as Record<string, unknown>,
-        trace_id: String(trace.id),
-      })
-      setSaved(true)
-      setTimeout(() => { setOpen(false); setSaved(false) }, 1500)
+      const { traceToTestCase } = await import('../lib/api.ts')
+      const res = await traceToTestCase(trace.id, v)
+      setResult(`✓ Added to "${res.dataset_name}" as ${res.case_key}`)
+      setTimeout(() => { setOpen(false); setResult(''); setVerdict('') }, 2500)
     } catch (e) {
-      console.error('Backflow failed:', e)
+      setResult(`Error: ${e instanceof Error ? e.message : 'failed'}`)
     } finally {
       setSaving(false)
     }
@@ -1395,37 +1428,47 @@ function SaveToDatasetButton({ trace }: { trace: Trace }) {
   if (!open) {
     return (
       <button
-        onClick={handleOpen}
+        onClick={() => setOpen(true)}
         className="px-2 py-1 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
       >
-        Save to Dataset
+        Add to Test Set
       </button>
     )
   }
 
+  if (result) {
+    return (
+      <span className={`text-[10px] font-medium ${result.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+        {result}
+      </span>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-2">
-      <select
-        value={selectedId}
-        onChange={e => setSelectedId(Number(e.target.value))}
-        className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-700"
-      >
-        {datasets.map(d => (
-          <option key={d.id} value={d.id}>{d.name}</option>
-        ))}
-      </select>
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] text-slate-500">Verdict:</span>
       <button
-        onClick={handleSave}
-        disabled={saving || saved}
-        className={`px-2 py-1 rounded text-[10px] font-medium ${
-          saved ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-600 text-white hover:bg-blue-700'
-        } disabled:opacity-50`}
+        onClick={() => handleSave('pass')}
+        disabled={saving}
+        className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
       >
-        {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}
+        {saving && verdict === 'pass' ? '...' : 'Pass'}
       </button>
-      <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-600">
-        Cancel
+      <button
+        onClick={() => handleSave('fail')}
+        disabled={saving}
+        className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
+      >
+        {saving && verdict === 'fail' ? '...' : 'Fail'}
       </button>
+      <button
+        onClick={() => handleSave('')}
+        disabled={saving}
+        className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+      >
+        {saving && verdict === '' ? '...' : 'Skip'}
+      </button>
+      <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-600 ml-1">✕</button>
     </div>
   )
 }
