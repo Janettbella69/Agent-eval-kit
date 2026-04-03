@@ -75,7 +75,8 @@ async def collect_sse(
     if ablation_flags:
         body["ablation_flags"] = ablation_flags
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=30.0)) as client:
+    # verify=False: eval backend connects via localhost HTTPS (self-signed cert)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=30.0), verify=False) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             if resp.status_code != 200:
                 text = await resp.aread()
