@@ -192,9 +192,14 @@ async def grade_trace(result: CollectedResult, case: dict) -> dict:
 
             if effective_weights.get("groundedness", 0) > 0:
                 await _run_llm_grader_logged("groundedness", grade_groundedness, result)
-        except Exception:
-            # LLM graders failed — graceful degradation
-            pass
+        except Exception as e:
+            # LLM graders failed — log for diagnostics instead of silent swallow
+            import logging
+            logging.getLogger(__name__).error(f"LLM graders setup/run failed: {e}", exc_info=True)
+            grading_log.append({
+                "step": "llm_graders_setup", "category": "llm",
+                "status": "error", "error": str(e)[:300],
+            })
 
     # ── Composite Score ──
     composite_score, is_pass = compute_composite_score(grader_results, case_type)

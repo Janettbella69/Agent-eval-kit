@@ -407,6 +407,9 @@ async def run_eval_agent(
 
 # ── Single Grader (new 0-100 mode) ───────────────────────────────────
 
+_GRADER_TIMEOUT_S = 120  # Max seconds per LLM grader call
+
+
 async def run_eval_grader(
     system_prompt: str,
     user_message: str,
@@ -432,12 +435,19 @@ async def run_eval_grader(
 
     num_turns = 0
     try:
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(user_message)
-            async for msg in client.receive_response():
-                if isinstance(msg, ResultMessage):
-                    num_turns = getattr(msg, "num_turns", 0) or 0
-                    break
+        async def _run():
+            nonlocal num_turns
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(user_message)
+                async for msg in client.receive_response():
+                    if isinstance(msg, ResultMessage):
+                        num_turns = getattr(msg, "num_turns", 0) or 0
+                        break
+
+        await asyncio.wait_for(_run(), timeout=_GRADER_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        logger.error(f"LLM grader '{grader_name}' timed out after {_GRADER_TIMEOUT_S}s")
+        return None
     except Exception as e:
         logger.error(f"LLM grader '{grader_name}' Agent SDK error: {e}")
         return None
@@ -445,11 +455,21 @@ async def run_eval_grader(
         if env_backup is not None:
             os.environ["CLAUDECODE"] = env_backup
 
+    # Case-insensitive lookup — LLM may send "Groundedness" instead of "groundedness"
     raw_scores = get_scores()
     grader_data = raw_scores.get(grader_name)
+    if not grader_data:
+        # Fallback: case-insensitive search
+        for key, val in raw_scores.items():
+            if key.lower() == grader_name.lower():
+                grader_data = val
+                break
 
     if not grader_data or not isinstance(grader_data, dict):
-        logger.warning(f"LLM grader '{grader_name}' completed (turns={num_turns}) but no score recorded")
+        logger.warning(
+            f"LLM grader '{grader_name}' completed (turns={num_turns}) but no score recorded. "
+            f"Available keys: {list(raw_scores.keys())}"
+        )
         return None
 
     return {

@@ -48,7 +48,7 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
     global _scores
     scores = _scores
 
-    grader_name = args.get("grader_name", "").strip()
+    grader_name = args.get("grader_name", "").strip().lower()
     reasoning = args.get("reasoning", "")
 
     # Binary result + optional numeric score
@@ -57,34 +57,48 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
     result_raw = str(args.get("result", "")).strip()
     explicit_score = args.get("score")
     result = ""
+
+    def _parse_score(raw) -> float | None:
+        """Parse score from various formats: 67, "67", "67%", "0.67"."""
+        if raw is None:
+            return None
+        s = str(raw).strip().rstrip("%")
+        try:
+            val = float(s)
+            # If value looks like a ratio (0.0-1.0), convert to percentage
+            if 0 < val < 1:
+                val = val * 100
+            return val
+        except (TypeError, ValueError):
+            return None
+
     if result_raw.lower() in ("pass", "true", "yes"):
         result = "Pass"
-        # Use explicit score if provided, otherwise default 100
-        if explicit_score is not None:
-            try:
-                score = max(70, min(100, float(explicit_score)))  # Pass scores: 70-100
-            except (TypeError, ValueError):
-                score = 100.0
+        parsed = _parse_score(explicit_score)
+        if parsed is not None:
+            score = max(70, min(100, parsed))  # Pass scores: 70-100
         else:
             score = 100.0
     elif result_raw.lower() in ("fail", "false", "no"):
         result = "Fail"
-        # Use explicit score if provided, otherwise default 30
-        # Preserves granularity: FAIL at 65% grounding > FAIL at 20% grounding
-        if explicit_score is not None:
-            try:
-                score = max(0, min(69, float(explicit_score)))  # Fail scores: 0-69
-            except (TypeError, ValueError):
-                score = 30.0
+        parsed = _parse_score(explicit_score)
+        if parsed is not None and parsed > 0:
+            score = max(0, min(69, parsed))  # Fail scores: 0-69
+        elif parsed == 0:
+            # LLM sent score=0 — check reasoning for a numeric ratio as fallback
+            import re
+            ratio_match = re.search(r'(?:grounding_ratio|ratio|grounded)[:\s]*(\d+)%', reasoning, re.IGNORECASE)
+            if ratio_match:
+                score = max(0, min(69, float(ratio_match.group(1))))
+            else:
+                score = 30.0  # Default Fail score
         else:
             score = 30.0
     else:
         # Fallback: accept numeric score for backward compat
         raw_score = args.get("score", args.get("result", 0))
-        try:
-            score = max(0, min(100, float(raw_score)))
-        except (TypeError, ValueError):
-            score = 0.0
+        parsed = _parse_score(raw_score)
+        score = max(0, min(100, parsed)) if parsed is not None else 0.0
         # Infer result from numeric score
         result = "Pass" if score >= 70 else "Fail"
 

@@ -37,6 +37,18 @@ _MAX_OPLOG_CHARS = 4000
 # Calibration few-shots directory — loaded from train set via extract_few_shots.py
 _CALIBRATION_DIR = Path(__file__).resolve().parent.parent.parent / "calibration" / "few_shots"
 
+# Error message patterns — short guide texts that are actually API/auth errors
+_ERROR_PATTERNS = ("credit balance", "api error", "failed to authenticate", "author anthropic is banned",
+                   "may not exist or you may not have access", "openrouter error")
+
+
+def _is_error_message(text: str) -> bool:
+    """Detect if guide text is actually an error message, not a real guide."""
+    if len(text) > 500:
+        return False
+    lower = text.lower()
+    return any(p in lower for p in _ERROR_PATTERNS)
+
 
 def _load_few_shots(grader_name: str) -> str:
     """Load few-shot examples from calibration files. Returns empty string if not found."""
@@ -639,7 +651,7 @@ async def grade_groundedness(result: CollectedResult) -> GraderResult:
     This is the primary hallucination detector. The judge extracts factual claims
     from the guide, then checks each against the source list and guide citations.
     """
-    if not result.guide_text or len(result.guide_text) < 200:
+    if not result.guide_text or len(result.guide_text) < 200 or _is_error_message(result.guide_text):
         return GraderResult(name="groundedness", score=0, weight=0.15,
                             category="llm", details={"skipped": True, "reason": "no guide text"})
 
@@ -690,7 +702,8 @@ Note: You can only verify whether the source LIST contains relevant entries — 
    - If grounded/checked < 0.8 OR any critical fabrication exists → result="Fail"
 
 ## Output Format
-Call `score_grader` with: grader_name="groundedness", result="Pass" or "Fail", score=0-100 (use the grounding ratio — e.g. if 67% grounded, score=67), reasoning.
+Call `score_grader` with: grader_name="groundedness", result="Pass" or "Fail", score=YOUR_GROUNDING_RATIO (NOT 0!), reasoning.
+CRITICAL: The score parameter MUST be the grounding ratio as a number. If 67% of claims are grounded, score=67. If 90% grounded, score=90. NEVER send score=0 unless literally 0 claims are grounded.
 Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) grounding_ratio: N%, (4) critical_fabrications: list or "none".
 
 ## Examples
