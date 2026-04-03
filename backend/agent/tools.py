@@ -32,13 +32,15 @@ def get_scores() -> dict:
 @tool(
     "score_grader",
     "Record your evaluation verdict for this grading dimension. "
-    "Preferred: call with result='Pass' or result='Fail' for binary evaluation. "
-    "You can call this multiple times — if self-reflection reveals issues, "
-    "call again with your revised verdict. The LAST call is your final answer. "
+    "Call with result='Pass' or result='Fail' for binary evaluation. "
+    "IMPORTANT: Also provide a numeric 'score' (0-100) reflecting the degree. "
+    "Example: result='Fail', score=65 means 'failed but close'; result='Fail', score=10 means 'badly failed'. "
+    "You can call this multiple times — the LAST call is your final answer. "
     "Include detailed reasoning with specific evidence from the guide.",
     {
         "grader_name": str,
         "result": str,
+        "score": str,
         "reasoning": str,
     },
 )
@@ -49,15 +51,33 @@ async def score_grader(args: dict[str, Any]) -> dict[str, Any]:
     grader_name = args.get("grader_name", "").strip()
     reasoning = args.get("reasoning", "")
 
-    # Binary result (preferred) → auto-map to score
+    # Binary result + optional numeric score
+    # Judge returns Pass/Fail verdict; score field provides granularity within verdict.
+    # FAIL with score=67 (67% grounded) > FAIL with score=20 (20% grounded).
     result_raw = str(args.get("result", "")).strip()
+    explicit_score = args.get("score")
     result = ""
     if result_raw.lower() in ("pass", "true", "yes"):
         result = "Pass"
-        score = 100.0
+        # Use explicit score if provided, otherwise default 100
+        if explicit_score is not None:
+            try:
+                score = max(70, min(100, float(explicit_score)))  # Pass scores: 70-100
+            except (TypeError, ValueError):
+                score = 100.0
+        else:
+            score = 100.0
     elif result_raw.lower() in ("fail", "false", "no"):
         result = "Fail"
-        score = 0.0
+        # Use explicit score if provided, otherwise default 30
+        # Preserves granularity: FAIL at 65% grounding > FAIL at 20% grounding
+        if explicit_score is not None:
+            try:
+                score = max(0, min(69, float(explicit_score)))  # Fail scores: 0-69
+            except (TypeError, ValueError):
+                score = 30.0
+        else:
+            score = 30.0
     else:
         # Fallback: accept numeric score for backward compat
         raw_score = args.get("score", args.get("result", 0))

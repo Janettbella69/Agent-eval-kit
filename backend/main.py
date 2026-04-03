@@ -47,7 +47,29 @@ app.include_router(graders_router)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "eval-platform"}
+    """Health check with eval system diagnostics."""
+    from storage import queries
+    try:
+        db = await queries.get_db()
+        rows = await db.execute_fetchall("SELECT status, COUNT(*) as c FROM traces GROUP BY status")
+        total = sum(r["c"] for r in rows)
+        graded = sum(r["c"] for r in rows if r["status"] == "graded")
+        ann_rows = await db.execute_fetchall("SELECT COUNT(*) as c FROM traces WHERE human_pass IS NOT NULL")
+        annotated = ann_rows[0]["c"] if ann_rows else 0
+        val_rows = await db.execute_fetchall("SELECT COUNT(*) as c FROM grader_validations")
+        validations = val_rows[0]["c"] if val_rows else 0
+        warnings = []
+        if annotated < 50:
+            warnings.append(f"Only {annotated} human annotations (need 100+ for judge validation)")
+        if validations == 0:
+            warnings.append("No grader validations — judges are unvalidated")
+        if graded < total * 0.5:
+            warnings.append(f"Only {graded}/{total} traces graded ({round(graded/max(total,1)*100)}%)")
+        return {"status": "ok" if not warnings else "degraded", "service": "eval-platform",
+                "traces": total, "graded": graded, "annotated": annotated, "validations": validations,
+                "warnings": warnings}
+    except Exception:
+        return {"status": "ok", "service": "eval-platform"}
 
 
 @app.websocket("/ws/experiments/{experiment_id}")

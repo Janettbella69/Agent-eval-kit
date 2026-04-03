@@ -297,50 +297,66 @@ async def _run_llm_grader(
     user_message: str,
     grader_name: str,
     weight: float,
+    max_retries: int = 2,
 ) -> GraderResult | None:
-    """Run an LLM grader via the eval agent. Returns None on failure (logged).
+    """Run an LLM grader via the eval agent with retry on failure.
 
     Prompt priority: DB active prompt > code-provided system_prompt.
+    Retries up to max_retries times with exponential backoff on API errors.
     """
+    import asyncio as _asyncio
+
     # Override prompt from DB if available; track version for traceability
     db_prompt, prompt_version = await _get_prompt_from_db(grader_name)
     if db_prompt:
         system_prompt = db_prompt
-    try:
-        from agent.eval_agent import run_eval_grader
-        result = await run_eval_grader(system_prompt, user_message, grader_name)
-        if result is None:
-            logger.warning(f"LLM grader '{grader_name}' returned None — agent failed or didn't call score_grader")
-            return None
 
-        score = result.get("score", 0)
-        verdict = result.get("result", "")
-        reasoning = result.get("reasoning", "")
-        details = result.get("details", {})
-        details["reasoning"] = reasoning
-        details["verdict"] = verdict  # Binary Pass/Fail verdict
-        details["system_prompt"] = system_prompt  # For judge prompt traceability
-        details["prompt_version"] = prompt_version  # 0 = code default, N = DB version
-        details["prompt_source"] = "db" if prompt_version > 0 else "code"
-        details["num_turns"] = result.get("num_turns", 0)
+    last_error = None
+    for attempt in range(1, max_retries + 2):  # 1-based, includes initial attempt
+        try:
+            from agent.eval_agent import run_eval_grader
+            result = await run_eval_grader(system_prompt, user_message, grader_name)
+            if result is None:
+                logger.warning(f"LLM grader '{grader_name}' returned None (attempt {attempt}/{max_retries+1})")
+                if attempt <= max_retries:
+                    await _asyncio.sleep(2 ** attempt)
+                    continue
+                return None
 
-        # Store self-correction metadata
-        revision_num = result.get("revision_num", 1)
-        revisions = result.get("revisions", [])
-        if revision_num > 1:
-            details["revision_count"] = revision_num
-            details["revisions"] = revisions
+            score = result.get("score", 0)
+            verdict = result.get("result", "")
+            reasoning = result.get("reasoning", "")
+            details = result.get("details", {})
+            details["reasoning"] = reasoning
+            details["verdict"] = verdict
+            details["system_prompt"] = system_prompt
+            details["prompt_version"] = prompt_version
+            details["prompt_source"] = "db" if prompt_version > 0 else "code"
+            details["num_turns"] = result.get("num_turns", 0)
+            if attempt > 1:
+                details["retry_attempt"] = attempt
 
-        return GraderResult(
-            name=grader_name,
-            score=float(score),
-            weight=weight,
-            category="llm",
-            details=details,
-        )
-    except Exception as e:
-        logger.error(f"LLM grader '{grader_name}' exception: {e}")
-        return None
+            revision_num = result.get("revision_num", 1)
+            revisions = result.get("revisions", [])
+            if revision_num > 1:
+                details["revision_count"] = revision_num
+                details["revisions"] = revisions
+
+            return GraderResult(
+                name=grader_name,
+                score=float(score),
+                weight=weight,
+                category="llm",
+                details=details,
+            )
+        except Exception as e:
+            last_error = e
+            logger.warning(f"LLM grader '{grader_name}' attempt {attempt}/{max_retries+1} failed: {e}")
+            if attempt <= max_retries:
+                await _asyncio.sleep(2 ** attempt)
+
+    logger.error(f"LLM grader '{grader_name}' failed after {max_retries+1} attempts: {last_error}")
+    return None
 
 
 # ── Grader 1: Rubric Compliance ──────────────────────────────────────
@@ -407,7 +423,7 @@ Agent recommended products that satisfy the rubric's functional requirements. Th
 - The key question is: "Do the recommended products solve the user's problem?" — not "Are they the exact same products as the expert list?"
 
 ## Output Format
-Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
+Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or "Fail", score=0-100 (your confidence — e.g. 80 for strong pass, 40 for borderline fail), reasoning.
 Reasoning MUST state: (1) which golden products found or missed, (2) spec accuracy vs expert, (3) limitations disclosed or missed.
 
 ## Examples
@@ -424,7 +440,7 @@ Reasoning MUST state: (1) which golden products found or missed, (2) spec accura
 ---
 Compare the agent's output against the ground truth above.
 Check: (1) were golden products recommended? (2) are spec claims accurate per expert verification? (3) were key limitations disclosed?
-Determine Pass or Fail. Call score_grader with your verdict."""
+Determine Pass or Fail. Call score_grader with result, score (0-100), and reasoning."""
 
     r = await _run_llm_grader(system_prompt, user_message, "rubric_compliance", 0.15)
     if r is None:
@@ -475,7 +491,7 @@ Guide misses >30% of rubric requirements, OR addresses them only superficially w
 Guide addresses 70%+ of scene rubric requirements with specific evidence (product names, specs, measurements, source citations).
 
 ## Output Format
-Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or result="Fail", reasoning.
+Call `score_grader` with: grader_name="rubric_compliance", result="Pass" or "Fail", score=0-100 (your confidence — e.g. 80 for strong pass, 40 for borderline fail), reasoning.
 Reasoning MUST list: (1) total rubric requirements, (2) how many addressed with evidence, (3) which are missing.
 
 ## Examples
@@ -530,7 +546,7 @@ Guide recommends the product without mentioning the trap, OR only hints vaguely 
 Guide explicitly identifies the hidden risk/trap AND explains consequences to the user. The warning must be clear enough that a reasonable reader would notice it.
 
 ## Output Format
-Call `score_grader` with: grader_name="trap_detection", result="Pass" or result="Fail", reasoning.
+Call `score_grader` with: grader_name="trap_detection", result="Pass" or "Fail", score=0-100, reasoning.
 Reasoning MUST state: (1) was the risk mentioned? (2) how explicitly? (3) would a reader notice?
 
 ## Examples
@@ -593,7 +609,7 @@ No actionable purchase path — prices missing for most products (>50%), no purc
 User can make a purchase decision — at least 50% of recommended products have current prices AND where-to-buy info (specific links or retailer names with product identifiers).
 
 ## Output Format
-Call `score_grader` with: grader_name="actionability", result="Pass" or result="Fail", reasoning.
+Call `score_grader` with: grader_name="actionability", result="Pass" or "Fail", score=0-100, reasoning.
 Reasoning MUST count: (1) products with prices: X/Y, (2) products with buy links: X/Y, (3) has audience segmentation: yes/no.
 
 ## Examples
@@ -674,7 +690,7 @@ Note: You can only verify whether the source LIST contains relevant entries — 
    - If grounded/checked < 0.8 OR any critical fabrication exists → result="Fail"
 
 ## Output Format
-Call `score_grader` with: grader_name="groundedness", result="Pass" or result="Fail", reasoning.
+Call `score_grader` with: grader_name="groundedness", result="Pass" or "Fail", score=0-100 (use the grounding ratio — e.g. if 67% grounded, score=67), reasoning.
 Reasoning MUST include: (1) claims_checked: N, (2) claims_grounded: N, (3) grounding_ratio: N%, (4) critical_fabrications: list or "none".
 
 ## Examples

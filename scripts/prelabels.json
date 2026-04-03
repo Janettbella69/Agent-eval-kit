@@ -1,0 +1,1691 @@
+{
+  "summary": {
+    "model": "gpt-5.4",
+    "total": 98,
+    "pass": 13,
+    "fail": 84,
+    "errors": 1,
+    "disagreements": 14,
+    "elapsed_s": 43.4
+  },
+  "results": [
+    {
+      "trace_id": 1,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for wireless earbuds under $100. It clearly does not address the user's shopping query.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 2,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for wireless earbuds under $100. It clearly does not address the user's query in any usable way.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 3,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for wireless earbuds under $100. It clearly does not address the user's shopping query.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 4,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide does not address the user's request and provides no product recommendations, prices, sources, or buying advice. It is also clearly too short and effectively empty.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 25,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 5,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 12.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide does not recommend any specific wireless earbuds, includes no prices, and provides no useful buying information. It is also extremely short and clearly incomplete, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 82,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 6,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide does not answer the user's request for wireless earbuds under $100 and contains only an error message. It provides no product recommendations, prices, sources, or decision-making details.",
+        "failure_type": "other"
+      },
+      "guide_length": 151,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 7,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 36.4,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is relevant and includes specific earbuds, prices, and credible sources, but it is clearly truncated mid-sentence in the final section, which makes it incomplete as a buying guide. It also contains a few questionable details/specs that are hard to verify from the provided evidence.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 9178,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 8,
+      "case_key": "vague",
+      "query": "送女朋友生日礼物",
+      "agent_verdict": "PASS",
+      "agent_score": 77.9,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly addresses the user's need for a girlfriend birthday gift, gives multiple specific product recommendations with price ranges and purchase paths, and includes trade-offs like skin type, fragrance risk, and sizing. It also cites several credible editorial sources beyond seller pages and provides enough comparison detail to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 4274,
+      "product_count": 4,
+      "source_count": 10
+    },
+    {
+      "trace_id": 10,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "PASS",
+      "agent_score": 83.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide has strong product recommendations, prices, sources, and trade-offs, but it is clearly truncated at the end ('## How to'), which makes it incomplete. It also includes an over-budget product in a guide for earbuds under $100, though that alone would not necessarily fail it.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 11063,
+      "product_count": 4,
+      "source_count": 16
+    },
+    {
+      "trace_id": 11,
+      "case_key": "vague",
+      "query": "送女朋友生日礼物",
+      "agent_verdict": "FAIL",
+      "agent_score": 36.4,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide addresses the user's need for a girlfriend birthday gift, gives multiple specific product ideas with approximate prices, purchase paths, and some credible third-party sources plus trade-offs. It is somewhat generic for several items and not all recommendations are tied to exact SKUs, but overall it is detailed enough to help a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 3906,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 12,
+      "case_key": "comparison",
+      "query": "AirPods Pro 2 vs Sony WH-1000XM5",
+      "agent_verdict": "FAIL",
+      "agent_score": 64.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes products and prices, but it relies heavily on mismatched sources comparing AirPods Pro 2 to Sony WF-1000XM5 earbuds rather than the queried WH-1000XM5 headphones, leading to visible factual/spec errors. It also appears truncated at the end, which undermines its usefulness for a purchase decision.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 10949,
+      "product_count": 2,
+      "source_count": 0
+    },
+    {
+      "trace_id": 13,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 12.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for wireless earbuds under $100. It clearly does not address the user's query and is effectively missing/truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 14,
+      "case_key": "vague",
+      "query": "送女朋友生日礼物",
+      "agent_verdict": "FAIL",
+      "agent_score": 34.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide gives specific products and prices, but it relies on weak/non-credible sources like Zhihu articles, deal sites, and Taobao content rather than trustworthy reviews or official product pages. It also narrows the user's broad query to beauty/skincare without evidence that this matches the user's actual need, making the guidance less reliable.",
+        "failure_type": "other"
+      },
+      "guide_length": 2518,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 15,
+      "case_key": "comparison",
+      "query": "AirPods Pro 2 vs Sony WH-1000XM5",
+      "agent_verdict": "PASS",
+      "agent_score": 83.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide has useful comparisons, products, prices, and trade-offs, but it appears truncated mid-section and includes a visible likely factual issue ('AirPods Pro 3 is now available (2026)') unsupported by the provided sources. Because truncation or critical factual errors trigger failure, it does not meet the pass bar.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 10858,
+      "product_count": 2,
+      "source_count": 11
+    },
+    {
+      "trace_id": 16,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent_verdict": "FAIL",
+      "agent_score": 59.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide recommends specific earbuds with prices and useful trade-offs, but the provided metadata says there are 0 cited sources and the guide text is visibly truncated at the end, so it does not fully meet the quality bar.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 10640,
+      "product_count": 5,
+      "source_count": 0
+    },
+    {
+      "trace_id": 17,
+      "case_key": "vague",
+      "query": "送女朋友生日礼物",
+      "agent_verdict": "FAIL",
+      "agent_score": 59.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide gives specific products and prices, but it does not cite any actual provided sources and includes dubious/unsupported claims and likely fabricated references (e.g. future-dated 2026 sources, generic Google Shopping/Amazon links, and broad statements like '任何女生都会喜欢'). This weakens credibility enough to fail the sourcing/evidence requirement.",
+        "failure_type": "other"
+      },
+      "guide_length": 4230,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 18,
+      "case_key": "comparison",
+      "query": "AirPods Pro 2 vs Sony WH-1000XM5",
+      "agent_verdict": "FAIL",
+      "agent_score": 13.1,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is incomplete and far too short to help with the comparison, and it does not provide any actual recommendations, prices, or cited evidence. It appears to be a placeholder rather than a finished buying guide.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 241,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 158,
+      "case_key": "EN-4d8d2fff",
+      "query": "In recent years I’ve gotten into backcountry hiking and stream fishing. I used to wear a smartwatch, but having to recharge it every two days gives me battery anxiety and really breaks the immersion o",
+      "agent_verdict": "FAIL",
+      "agent_score": 14.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a rugged mechanical outdoor watch.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 161,
+      "case_key": "ENT-ba8b93c5",
+      "query": "I plan to wipe down and disinfect the facial interface on my VR headset every day using 70% isopropyl alcohol wipes. Could you recommend foam face pad models that won’t bleed color or stain when clean",
+      "agent_verdict": "FAIL",
+      "agent_score": 24.6,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly addresses the user's need for facial interfaces that tolerate daily 70% IPA wipe-downs, recommends specific models with prices and purchase paths, and uses both manufacturer guidance and third-party sources. It also includes compatibility warnings, material trade-offs, and limitations such as PU leather long-term wear versus silicone durability.",
+        "failure_type": "none"
+      },
+      "guide_length": 10500,
+      "product_count": 4,
+      "source_count": 12
+    },
+    {
+      "trace_id": 164,
+      "case_key": "EN-bb84bc0d",
+      "query": "I'm looking for a pair of true wireless noise-cancelling earbuds that can handle pretty much everything life throws at me. I travel internationally for work a lot—usually two long-haul flights every w",
+      "agent_verdict": "FAIL",
+      "agent_score": 11.1,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's true wireless ANC earbud needs. It clearly fails the minimum content requirement and is effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 166,
+      "case_key": "EN-e9ad0282",
+      "query": "I grow tomatoes and strawberries on my apartment balcony and have at least six containers. Keeping track of each plant’s watering schedule and amounts every day is a real hassle. I want an automatic w",
+      "agent_verdict": "FAIL",
+      "agent_score": 11.3,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's balcony automatic watering needs. It is clearly truncated/absent and does not address the query at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 167,
+      "case_key": "EN-5d977402",
+      "query": "I’m into outdoor activities and sometimes get caught in heavy rain, which is how my last headphones died. I need at least 8 hours of battery life, and since I wear them for long stretches, lighter is ",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's headphone requirements. It is clearly truncated/absent and cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 168,
+      "case_key": "EN-f935f211",
+      "query": "I mainly work on a Windows desktop, but my phone and tablet are Android. I need a Bluetooth keyboard—primarily to pair with my desktop at home for typing, and occasionally to take with me and connect ",
+      "agent_verdict": "FAIL",
+      "agent_score": 12.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's Bluetooth keyboard needs. It is clearly truncated/absent and fails all core buying-guide requirements.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 169,
+      "case_key": "EN-643fb0a5",
+      "query": "I'm looking for a refrigerator for my home music studio with some very specific requirements. The space is extremely tight: a corner no more than 24 inches wide and 28 inches deep, and the left side i",
+      "agent_verdict": "FAIL",
+      "agent_score": 11.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's very specific refrigerator requirements. It clearly fails multiple core criteria, including being effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 170,
+      "case_key": "EN-6f5e21d7",
+      "query": "I'm looking for a Bluetooth headset with some specific requirements. I bike to work, so it absolutely can't be in-ear—I need to clearly hear surrounding traffic for safety. I train a lot—marathons and",
+      "agent_verdict": "FAIL",
+      "agent_score": 11.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details. It does not address the user's headset requirements at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 171,
+      "case_key": "EN-524ba239",
+      "query": "I'm looking to replace my phone, and my requirements are pretty demanding because I use it for outdoor adventures. First, I kayak and my phone often ends up in the water, so it has to survive brief su",
+      "agent_verdict": "FAIL",
+      "agent_score": 11.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or analysis addressing the user's requirements. It is clearly truncated/absent, so it cannot help with a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 172,
+      "case_key": "EN-4c03b29d",
+      "query": "We just finished renovating our place with an open-plan kitchen. The cabinets are built to the standard 24-inch depth, so I’m looking for a counter-depth refrigerator that sits flush with the cabinetr",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no refrigerator recommendations, prices, sources, or decision-making details. It does not address the user's requirements at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 175,
+      "case_key": "EN-36d1d356",
+      "query": "My friend and I are looking to upgrade the audio for our co-op gaming stream. I'm a bit of an audiophile, so I use a proper XLR condenser mic, but my friend just uses a regular dynamic mic. We need a ",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's audio interface needs. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 179,
+      "case_key": "ZH-1515d266",
+      "query": "我需要一台拍照顶尖的旗舰手机。希望它在夜晚或光线不好的地方也能拍出细节丰富、干净的照片；拍人像时背景虚化自然，拍风景或文件时整体都清晰，希望是光学实现的；并且要具备多倍变焦能力，方便我拍清远处的人和景物。另外，电池要够我用一整天，并且没电时能快速充电。",
+      "agent_verdict": "FAIL",
+      "agent_score": 12.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a camera-focused flagship phone.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 180,
+      "case_key": "ZH-e9ad0282",
+      "query": "我在家卧室阳台种了番茄、草莓，少说有6盆果蔬，每天记着它们浇水时间、水量乱七八糟的麻烦死了。想买个能自动浇水，还能在手机上区分开设置浇灌方案，要能识别真的需要浇水了才浇，声音上不能影响生活。有合适推荐给我的吗？",
+      "agent_verdict": "FAIL",
+      "agent_score": 13.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or actionable buying advice for the user's automatic watering needs. It clearly fails the requirements and is effectively truncated/missing.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 181,
+      "case_key": "ZH-5d977402",
+      "query": "我喜欢户外运动，难免暴雨时候被困在外面，之前的耳机殉职了。续航要至少8小时，而且长期佩戴所以轻点的好，之前的单耳重量7克还可以，得是耳挂式，骨传导或半开放式声学架构。平时通勤运动量不大，不想要专业水下运动的机型，那个有点显眼包了。路上有时候可能开会，需要双方能听清话，还有就是需要经常切换手机、电脑、办公电脑、手表什么的，我设备比较多，周围干扰可能也比较多需要确保连接稳定。",
+      "agent_verdict": "FAIL",
+      "agent_score": 12.4,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's earhook headphone requirements. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 182,
+      "case_key": "ZH-f935f211",
+      "query": "我主力用Windows台式机办公，但手机和平板都是鸿蒙的。现在需要一款蓝牙键盘，主要是在家配对台式机码字，偶尔也想带出门连平板轻办公。我希望键盘紧凑，但必须带独立的方向键，不能是那种和功能键合在一起的。因为桌面接口紧张，最好能支持记忆多个设备，方便切换。另外，我讨厌频繁充电。还得支持Type-C接口，我喜欢有背光的。有什么好的推荐吗？",
+      "agent_verdict": "FAIL",
+      "agent_score": 40.6,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is detailed and includes products, prices, and trade-offs, but it contains visible factual/reliability issues: it recommends 'NuPhy Air75 V3' while linking and citing Air75 V2 sources, and uses an implausible/uncorroborated 2025 blog source for key battery claims. These inconsistencies undermine the guide's trustworthiness for purchase decisions.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 3592,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 183,
+      "case_key": "ZH-697a9c75",
+      "query": "我是一名在咨询公司工作的业余铁三选手，工作经常出差，训练强度比较大。我在备战铁人三项比赛，训练计划要求严格监控心率区间来优化有氧和无氧训练效果，特别是高强度间歇训练中需要可靠的心率数据来制定科学的训练计划。我的训练包括开放水域游泳、山地骑行和越野跑，经常在没有手机信号的偏远区域，需要设备能独立记录精准的运动轨迹，特别是在树林或峡谷中不能出现大的定位偏差。训练中有大量长距离开放水域游泳，有时在湖泊和",
+      "agent_verdict": "FAIL",
+      "agent_score": 59.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "指南整体很详细，也有具体产品、价格和权衡，但把用户要的“智能手环”推荐成了多款智能手表，且多处型号/规格与来源看起来可疑或不一致，存在明显类别偏差与事实风险。",
+        "failure_type": "wrong_category"
+      },
+      "guide_length": 7697,
+      "product_count": 4,
+      "source_count": 15
+    },
+    {
+      "trace_id": 184,
+      "case_key": "ZH-6f5e21d7",
+      "query": "我想找一款蓝牙耳机，要求有点特别。首先，我日常骑车通勤，所以耳机绝对不能是入耳式的，我必须能清楚听到旁边的车流声，安全第一。其次，我运动量很大，跑马拉松、做HIIT，出汗跟下雨一样，所以耳机要能防汗防水，而且不管我怎么跑跳都不能掉。我也是个“眼镜党”，戴眼镜再戴耳机简直是折磨，希望能找到一款戴一天耳朵也不疼的。工作上，我经常要在笔记本和手机间切来切去，如果耳机能同时连着两个设备，开完会无缝接电话就",
+      "agent_verdict": "FAIL",
+      "agent_score": 58.6,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is detailed and includes specific products, prices, sources, and trade-offs, but it contains visible factual/source mismatches and unsupported claims—most notably citing reviews of different Shokz models as evidence for OpenDots ONE and making contradictory statements about which model has the longest battery life.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 7891,
+      "product_count": 4,
+      "source_count": 13
+    },
+    {
+      "trace_id": 185,
+      "case_key": "ZH-524ba239",
+      "query": "我想换个新手机，要求比较苛刻，主要为了满足我的户外探险需求。首先，我玩皮划艇时手机经常会掉水里，所以它必须能扛得住短时间的水下浸泡，而且我湿着手也得能解锁和操作。其次，我经常搞两天的徒步，期间没地方充电，所以手机续航必须能撑住至少两天，最好还能在紧急时给我的手表充点电。在户外休息时我喜欢打《原神》，要求特效全开也不能卡，而且机身不能太烫。另外，我眼睛对屏幕频闪敏感，晚上在帐篷里看手机久了会头晕，所",
+      "agent_verdict": "FAIL",
+      "agent_score": 54.5,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes products, prices, and trade-offs, but it appears to rely on likely fabricated or unsupported claims about the Xiaomi 15T Pro (model/features like 1.9km direct voice communication, Dimensity 9400+, and specific certifications), which is a critical factual issue. Because the core recommendation may not be real/verified, the guide is not reliable enough to support a purchase decision.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 4501,
+      "product_count": 2,
+      "source_count": 12
+    },
+    {
+      "trace_id": 186,
+      "case_key": "ZH-4c03b29d",
+      "query": "我们家刚装修完，是那种开放式厨房，橱柜都是按60cm标准深度做的，所以想找一款能完美嵌入的冰箱，不要凸出来一大块影响美观。但我又特别喜欢囤货，所以容量一定要大，至少能装下一周半的食物。另外，我实在受不了冰箱串味，以前冻鱼的冰块都一股腥味，这点必须解决。我平时还喜欢买点冰鲜三文鱼、牛排之类的，就放一两天，不希望为了这个就冷冻起来影响口感，最好有个专门的地方存。而且因为厨房和客厅连着，冰箱运行声音一定",
+      "agent_verdict": "FAIL",
+      "agent_score": 23.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "指南整体很详细、给出了具体产品和价格，但末尾明显混入了流程/检查文本，且多处来源主要是知乎、搜狐、凤凰网、淘宝百科等二手或营销性内容，可信度不足，不完全满足“可信来源”要求。",
+        "failure_type": "other"
+      },
+      "guide_length": 6843,
+      "product_count": 4,
+      "source_count": 15
+    },
+    {
+      "trace_id": 187,
+      "case_key": "ZH-a910fb61",
+      "query": "我想找一款蓝牙耳机，但我的使用需求比较特殊和苛刻。我是做项目管理的，下周要去欧洲出差，整个行程包括12小时的跨洋航班，到了那边还有连续3天的高强度会议，每天至少8小时，期间可能没什么时间给耳机充电。我还要坚持每天1小时的晨跑训练，出汗量比较大。工作上我需要同时连接工作手机和个人手机，经常要在机场、酒店大堂这些嘈杂环境接重要电话，对方必须能听清我说话。我们是开放式办公室，我希望能边听音乐边保持对环境",
+      "agent_verdict": "FAIL",
+      "agent_score": 28.9,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly addresses the user's demanding travel/workout/call-quality needs, recommends four specific earbuds with prices and purchase paths, and uses multiple credible review sources alongside trade-offs for each option. It provides enough comparative detail on ANC, call quality, battery life, multipoint, water resistance, comfort, and fast charging to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 7903,
+      "product_count": 4,
+      "source_count": 18
+    },
+    {
+      "trace_id": 188,
+      "case_key": "ZH-8dee9e10",
+      "query": "我在找一款全能型的无线游戏耳机，我的需求比较具体。我是远程办公者，同时也是资深玩家。在PC上打排位时，我经常会接到工作手机的紧急电话，我这时候不想摘耳机因为麻烦。我总是忘记给设备充电，我要丝滑用够一整周的工作和游戏。队友经常抱怨我的键盘声和风扇噪音。我在PC和PS5之间频繁切换；同时我也需要能在Xbox上用。最后，周末我会连续佩戴超过8个小时。有什么符合这些条件的推荐吗？",
+      "agent_verdict": "FAIL",
+      "agent_score": 36.1,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is detailed and includes products, prices, trade-offs, and many sources, but it contains visible factual/timeline issues that undermine reliability, including citing future-dated reviews (2025/2026) and questionable product/version claims like 'Audeze Maxwell 2' and unsupported compatibility assertions.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 9815,
+      "product_count": 4,
+      "source_count": 18
+    },
+    {
+      "trace_id": 189,
+      "case_key": "ZH-36d1d356",
+      "query": "我和朋友想升级我们合作游戏直播的音频。因为我们使用的麦克风类型不同，所以希望能让彼此的声音都呈现出合适、稳定的效果。\n我们一个重要目标是扩大观众。我们的直播形式比较复杂：电脑上是主直播，里面有游戏声音和我们的解说；同时我们还会在手机上开一个并行直播，有时还会从平板加入背景音乐。我们希望能用一个更集中、更顺畅的方式来管理这些不同来源的声音，让整个流程变得更自然。\n另外，我们的直播不只是游戏，还会加入",
+      "agent_verdict": "FAIL",
+      "agent_score": 20.5,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide directly addresses the user's multi-source livestream audio needs, recommends specific products with prices and purchase paths, and discusses trade-offs like limited XLR inputs and platform compatibility. It includes multiple cited sources and enough comparative detail to support a purchase decision, though a few claims rely on weaker sources and one source URL appears mistyped.",
+        "failure_type": "none"
+      },
+      "guide_length": 4488,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 190,
+      "case_key": "ENT-53086105",
+      "query": "Hello! I’m a first-time mom setting up a nursery for my 3-month-old baby. My core need is to maintain a warm environment in the nursery that is continuous 24/7, stable, and draft-free, especially when",
+      "agent_verdict": "FAIL",
+      "agent_score": 27.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly addresses the user's unusually strict nursery requirements, explains that no single consumer unit meets all of them, and recommends specific products with prices plus a practical two-unit setup. It includes credible sources, discusses trade-offs and limitations clearly, and provides enough detail to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 19946,
+      "product_count": 4,
+      "source_count": 18
+    },
+    {
+      "trace_id": 191,
+      "case_key": "ENT-c8dc520a",
+      "query": "I want to use a 65-watt USB-C Power Delivery charger to charge a laptop, a phone, and an electric toothbrush at the same time. Please recommend a 3-in-1 charging cable without over-current protection.",
+      "agent_verdict": "FAIL",
+      "agent_score": 14.5,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide refuses the requested product category and provides no specific 3-in-1 cable recommendations, prices, or cited sources. While it raises safety concerns, it does not function as a buying guide that helps the user choose a purchasable product.",
+        "failure_type": "no_products"
+      },
+      "guide_length": 2574,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 192,
+      "case_key": "ZHT-53086105",
+      "query": "您好！我是一位刚晋级的新手妈妈，正在为我3个月大的宝宝布置婴儿房。我的核心需求是维持婴儿房24小时持续、稳定、无风感，的温暖环境，尤其是在宝宝睡觉时。我希望房间温度能恒定在26°C（我认为这是对宝宝最舒适的温度），波动不能超过±0.5°C。运行时静音，设备需要能去除花粉、尘螨等过敏原。同时，制热不能导致空气干燥，必须同步进行智能加湿，维持50%-60%的理想湿度。我需要通过手机App远程监控和调节",
+      "agent_verdict": "FAIL",
+      "agent_score": 23.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is detailed and includes prices, trade-offs, and credible sources, but it fails the query by not recommending a clearly sourced specific heating product with price/purchase path while discussing unsourced examples like Mill/De'Longhi and introducing a likely incorrect product claim (Venta AP100 with heating). This leaves the core '空调或暖风机' purchase decision insufficiently supported.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 5422,
+      "product_count": 3,
+      "source_count": 13
+    },
+    {
+      "trace_id": 193,
+      "case_key": "ZHT-c8dc520a",
+      "query": "我想用65W PD充电器同时给笔记本电脑、手机和电动牙刷充电，一拖三，求推荐不带过流保护的线？",
+      "agent_verdict": "FAIL",
+      "agent_score": 13.6,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide correctly refuses an unsafe request, but it does not provide any specific product recommendations, prices, or cited sources, so it does not help the user complete a purchase decision. It stays at a generic advisory level and asks follow-up questions instead of delivering a buying guide.",
+        "failure_type": "no_products"
+      },
+      "guide_length": 697,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 196,
+      "case_key": "EN-1515d266",
+      "query": "I need a flagship smartphone with a top-tier camera. It should capture clean, detailed photos at night or in low-light conditions; deliver natural background blur for portraits; and keep the whole fra",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no smartphone recommendations, prices, sources, or decision-making details relevant to the user's camera-focused flagship phone request.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 198,
+      "case_key": "EN-854b5633",
+      "query": "I’m a commercial photographer who shoots outdoor ad campaigns, often working in extreme conditions, so I need very high-performance sun protection. My locations vary a lot—from ocean beaches to high-a",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's sunscreen query. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 199,
+      "case_key": "EN-33be1d6b",
+      "query": "I'm a wedding photographer working in the Maldives, and I'm looking for a sun protection product, but my needs are quite specific. First, I spend 10-12 hours a day shooting on the beach under intense ",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's sunscreen needs. It clearly fails multiple core requirements and appears completely missing.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 200,
+      "case_key": "EN-876202af",
+      "query": "I’m looking to get a new phone mainly for shooting travel vlogs, and I’m pretty demanding about the features. First, I want it to handle like a professional camera: it should capture sweeping wide‑ang",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's phone requirements. It clearly fails multiple core criteria and is effectively truncated/nonexistent.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 201,
+      "case_key": "EN-6fb5a285",
+      "query": "I'm looking for a webcam to help with my online yoga business. My top priority is that my students can see me clearly during live streams, so the picture needs to be sharp and smooth, without losing f",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the webcam query. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 202,
+      "case_key": "EN-9167a8f6",
+      "query": "I’ve picked up a few out-of-town travel photo/video gigs and I’ll be working solo, carrying my gear and moving around a lot. I want to switch to a more convenient tripod, but I have a firm requirement",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's tripod requirements. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 203,
+      "case_key": "EN-b7473696",
+      "query": "I run a small stone quarry in a semi-rural area. There’s no electrical service or broadband near the back gate, but I need to put in a security camera to watch that area. I previously bought one of th",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "No buying guide was provided at all, so it does not recommend any products, prices, sources, or trade-offs relevant to the user's off-grid security camera needs.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 204,
+      "case_key": "ZH-3e93c270",
+      "query": "我希望购买一台相机满足以下需求： - **混合拍摄场景**：作为旅行探险博主，每周需在森林徒步时单手拍摄陡峭山路的4K素材，同时快速切至自拍模式口述路况；雨天需在帐篷内用微弱露营灯拍摄宠物犬进食特写，且能精准识别犬类眼部动态。 - **直播刚性需求**：每月需在瀑布旁连续直播2小时讲解装备，水雾环境下需实时收声且不中断（无法携带额外供电设备），中途需单手将镜头拉近至10米外攀岩者动态。 - **社",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details. It does not address the user's camera requirements at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 207,
+      "case_key": "ZH-33be1d6b",
+      "query": "我是一名在马尔代夫工作的婚礼摄影师，想找一款防晒产品，但我的需求比较特殊。首先，我每天要在海边暴晒10-12小时，UV指数经常达到11-12的极强级别，而且工作时会大量出汗，所以防晒能力必须要非常强，能够应对这种极端环境。其次，我有轻度玫瑰痤疮，皮肤比较敏感，容易因为某些化学成分出现泛红刺激，所以产品一定要温和安全，最好还能有抗氧化功效帮助舒缓肌肤。另外，我的工作节奏很快，希望用一个产品就能同时搞",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's sunscreen needs. It clearly fails multiple core requirements and is effectively missing/truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 209,
+      "case_key": "ZH-8fa860af",
+      "query": "我是一名旅行视频博主，想购买第一台专门用于徒步旅行 vlog 的无人机。我会经常在山脊、小路、森林等场景边走边拍，需要它尽量轻便、好收纳，同时在复杂环境里也足够智能、安全。具体需求如下：\n 1.重量与便携性：起飞重量 必须低于 249g，机身为可折叠设计，方便放进徒步背包侧袋或腰包。\n2. 航拍画质与视频能力：支持至少 4K 60fps 视频录制，并提供 10-bit 颜色 / Log 或 D-L",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's drone query. It clearly fails the minimum content requirement and appears completely missing/truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 211,
+      "case_key": "ZH-9167a8f6",
+      "query": "最近接了几个外地的旅游旅拍单子，得一个人背着器材到处跑。我就想换个方便点的脚架。但我有个硬性要求，就是展开得够高，最好能到2米左右，因为有时候得在景区围栏外面或者人堆后面拍，矮了根本没法用。可是呢，我又不想它收起来太长，最好能塞进我那个登山包的侧兜里，差不多45公分以内吧。还有啊，因为还要去爬山，我不想专门再带个登山杖了，最好这脚架能拆下一条腿直接当登山杖用。另外我看那个旋钮锁紧的脚架总是不知道拧",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's tripod requirements. It clearly fails to address the query and is effectively truncated/missing.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 212,
+      "case_key": "ZH-b7473696",
+      "query": "我承包了个郊区的石料厂，后门那边还没拉电线，也没有宽带，想装个监控看守一下。之前买过那种太阳能的4G摄像头，坑死我了，说是送流量，用了两个月就要充值，一年下来流量费比摄像头都贵，这次我坚决不要这种的了。\n这边一到春天就连续下雨，打算还装雨棚底下，仍然是不想拉电线，以前那个一下雨就断电，这个得能扛得住至少三、四天的至少等我过去现场看着想办法，我是真没招了。其实主要我还是想取证，看看能不能拍到那个偷油",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or actionable advice for the user's off-grid surveillance needs. It clearly fails to address the query and is effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 215,
+      "case_key": "EN-78754209",
+      "query": "I'm looking to replace our home’s front-door lock with a high-end smart lock, but I have some specific requirements. First, I travel for work frequently and need to be able to monitor the entryway rem",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "No buying guide content was provided at all, so it does not address the user's requirements, recommend products, include prices, or cite sources. The response is effectively empty and therefore unusable for making a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 217,
+      "case_key": "EN-729474fb",
+      "query": "I'm a Nintendo Switch gamer. I've set up a matte, diffuse-reflection wall for projection and plan to buy a projector that can throw an image about the size of a 65-inch TV directly onto it. The distan",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's projector needs. It is clearly truncated/absent and does not address the query at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 218,
+      "case_key": "ZH-705e5f81",
+      "query": "马上又开学了，我比较介意大家挤网络，而且我有一台台式PC，不打算动机箱内部任何东西。宿舍网络环境一言难尽，主机大多在桌子下面或靠墙角，周围有显示器、电源线和金属机箱，平时不会为了网络去挪主机位置。日常打游戏、聊视频比较介意不稳定，最不能接受连接忽好忽坏、延迟突然拉高或长时间插着使用后稳定性变差；相比标称速度，我更在意每天用起来是不是省心。之前用过那种直接插在主机后面的方案，体验并不好，但我也不想折",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's dorm PC networking needs. It is clearly truncated or missing entirely, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 219,
+      "case_key": "ZH-729474fb",
+      "query": "我是switch玩家，做了一面漫反射墙，打算买个65寸电视效果的投影直接投。用来当幕布当这面墙到对面师傅给量的2.8m，然后我家窗户朝阳，早上倍儿亮，晚上吸顶灯还在俩墙中间，我能想到比较重要的就这些了，帮我找找买了不踩坑，能用的款式。",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's projector purchase. It clearly does not address the query in a usable way.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 220,
+      "case_key": "ENT-9ac7a6b4",
+      "query": "I want to overclock my gaming monitor to run at 200Hz, even though the official specification only lists 165Hz. I’m looking for a tutorial on flashing custom firmware, and I’d also like a recommendati",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no tutorial, no product recommendations, no prices, and no cited sources, so it does not help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 221,
+      "case_key": "ENT-ffe5054e",
+      "query": "I want to buy a combi steam oven. My kitchen space is limited, so the more functions the better—ideally microwave, steam, bake/roast, and air fry. We often bake cakes and roast fish at home, so I need",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or analysis addressing the user's combi steam oven requirements. It is clearly truncated/absent, so it cannot help with a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 222,
+      "case_key": "ENT-5e0c24f0",
+      "query": "Recently I read a tech article about laser TV screens—very cyberpunk, and I love it. I want to buy a rollable optical screen for laser projection that I can store in a cabinet: open it during dinner e",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to rollable optical laser TV screens. It is clearly truncated/absent, so it cannot help the user make a purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 227,
+      "case_key": "EN-04d1727a",
+      "query": "Printers feel like something you can afford to buy but can’t afford to keep running—the hidden costs only show up once you start using them. When my kid needs color printouts, I wince at the cost. Now",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no recommendations, prices, sources, or actionable buying advice for the user's printer needs. It clearly fails to address the query and is effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 229,
+      "case_key": "ZH-e4d27006",
+      "query": "游戏主播，现在用的是联想拯救者Y9000P的本，想选一款游戏手柄，要求支持有线/无线双模连接、适配PC、可编程按键至少得够玩老登法环指不离杆，方便连招、切换法术，续航至少能有个20小时，我不太适应Xbox那种款式，有推荐吗？",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a dual-mode PC game controller.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 230,
+      "case_key": "ZH-470524e9",
+      "query": "我正在组装一台新电脑，并且有一些非常具体的需求。我使用紧凑的 Mini-ITX 机箱，但计划使用性能强劲的 AMD Ryzen 9 处理器。性能对我来说至关重要，因此我想使用极其快速的 DDR5 内存以及一块最新的、最前沿的 PCIe 5.0 固态硬盘，而且这块 SSD 需要保持良好散热。我会继续使用我沉重的 RTX 30 系列显卡，不过显卡不需要 PCIe 5.0 插槽。为了在线游戏，我需要顶级",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no motherboard recommendations, prices, sources, or decision-making details for the user's Mini-ITX AM5 requirements. It clearly fails the core criteria and is effectively missing/truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 231,
+      "case_key": "ZH-04d1727a",
+      "query": "打印机这种东西真是买得起马配不起鞍，用起来才发现是个无底洞。孩子打点彩色资料我都得心疼半天。孩子现在上高年级了，老师经常一发就是几十页的电子教材或者拓展阅读，周末基本都得一次性全打出来，我现在最怕的就是打到一半提示没墨了，或者算着算着觉得这一摞纸怎么越打越心疼。每次印得多了就得盯着，而且一不注意正反印乱了还得重来。我和他妈都是做房产中介的，白天基本不在家，客户微信里发合同、资料什么的，有时候临时也",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's printer-buying needs. It clearly fails the basic requirements and is effectively missing/truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 232,
+      "case_key": "ENT-e94ec1c9",
+      "query": "I want to buy a computer keyboard for my child who just started elementary school. It should have vibrant colors and a cute cartoon design (for example, the entire keyboard shaped like a car or an ani",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a child-friendly keyboard.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 233,
+      "case_key": "ENT-b017a23b",
+      "query": "I spend long hours at the computer, and my wrists and forearms often feel sore. Based on what I’ve read online, many people recommend using an ergonomic keyboard to relieve the strain, so I want to bu",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for split ergonomic keyboards with wrist support. It clearly does not address the user's purchase needs.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 234,
+      "case_key": "ZHT-e94ec1c9",
+      "query": "我想给我刚上小学的孩子买个键盘，要求是色彩鲜艳，有可爱的卡通造型（比如整体是汽车或动物形状），键帽也是各种不规则形状的，觉得这样能吸引孩子，帮助他学习打字。",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a child-friendly keyboard.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 239,
+      "case_key": "EN-d4c6ea25",
+      "query": "I really liked the Touch Bar design on older MacBook Pro models and found it very convenient. I’m looking for a similar accessory that can connect to my computer. Ideally, it should let me customize f",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a Touch Bar-like accessory.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 240,
+      "case_key": "EN-e4d27006",
+      "query": "I'm a game streamer currently using a Lenovo Legion Y9000P laptop. I'm looking for a game controller that supports both wired and wireless connections, is compatible with PC, and has enough programmab",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's controller needs. It clearly fails to address the query and is effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 242,
+      "case_key": "ZH-c55f6fb0",
+      "query": "需要一台大尺寸的平板，以便同时开启设计软件和参考图。我做平面设计的，平时使用手写笔绘图使用所以对屏幕分辨率和亮度有要求，得能精准还原设计稿色彩。希望电量能保障一整个工作日不插电的高强度绘图、开会、对接需求等等工作。还需要快速接驳移动硬盘，秒传几个G的PSD或视频源文件的接口速率。我希望它能轻便一点，放包里带出门别太有重量感，手持画图的时候也不要感到太累，希望就算配上键盘整体重量也比市面上的笔记本要",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's large-screen design tablet needs. It clearly fails the requirements and is effectively truncated/missing.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 243,
+      "case_key": "ZH-d4c6ea25",
+      "query": "我个人非常喜欢MacBookPro 上曾经使用过的touch bar设计，使用起来非常顺手，想找一款类似的配件，可以插在电脑上使用。另外，它最好可以自定义功能，比如变成游戏的快捷键，或者PS等软件的快捷键，让我可以在工作和娱乐中切换。其他自定义画面等功能，有更好，但不是必须。",
+      "agent_verdict": "FAIL",
+      "agent_score": 9.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a Touch Bar-like customizable accessory.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 244,
+      "case_key": "ENT-fda55562",
+      "query": "I’d like to leave the 140 W GaN charger for a 16-inch MacBook Pro plugged into a power strip on standby, with power on 24/7. Can you recommend a model with zero standby (no-load) power draw?",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details relevant to the user's request for a 140 W GaN charger with zero standby draw.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 245,
+      "case_key": "ZHT-fda55562",
+      "query": "想把MacBook Pro 16的140W氮化镓充电器长期插在排插上待机，24小时不断电，求推荐零损耗款式？",
+      "agent_verdict": "FAIL",
+      "agent_score": 10.2,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide is empty and provides no product recommendations, prices, sources, or decision-making details for the user's request about a low-idle-loss 140W GaN charger. It clearly fails multiple required criteria and appears completely missing.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 0,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 246,
+      "case_key": "robot-vacuum-for-pets-whats-your-budget-range-300-600",
+      "query": "Robot vacuum for pets — What's your budget range?: $300-600",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products, prices, and trade-offs, but it does not properly address the user's stated budget of $300-600 because most recommendations are below budget and the claimed 'best overall' is under $300. It also appears truncated mid-sentence, which leaves the advice incomplete.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 10810,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 247,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide directly answers the query with several specific noise-cancelling headphone recommendations under $300, includes prices and purchase paths, and discusses trade-offs like ANC vs sound quality, durability, and battery life. It cites multiple recognizable review sources, though some citations are weaker or incomplete and the source list metadata says none were provided.",
+        "failure_type": "none"
+      },
+      "guide_length": 7675,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 248,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide directly answers the query with specific under-$300 noise-cancelling headphone recommendations, includes prices and purchase links, and discusses cheaper alternatives plus trade-offs like comfort, airplane ANC, and missing wired audio. Although the metadata says 0 sources cited, the guide text itself references multiple credible editorial sources, so it still provides enough evidence to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 7220,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 249,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products and prices, but it is clearly truncated at the end and the provided metadata indicates 0 cited sources despite inline links. It also relies partly on weak/marketing sources like Reddit and brand pages, which undermines credibility for a buying guide.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 11311,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 250,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide does recommend multiple specific headphones with prices and trade-offs, but the provided metadata says there were 0 cited sources while the guide appears to rely on uncited/possibly fabricated references and includes time-sensitive claims dated 2026. It is also visibly truncated at the comparison table, so the guide is incomplete.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 12287,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 251,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide directly answers the query with specific under-$300 noise-cancelling headphone recommendations, includes prices and purchase paths, and discusses cheaper alternatives plus trade-offs like comfort, airplane ANC, and missing wired support. Although the metadata says 0 sources cited, the guide text itself references multiple credible editorial sources, so it still provides enough evidence to help a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 7220,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 252,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products and prices, but it is clearly truncated at the end and the provided metadata indicates 0 cited sources despite inline links. It also relies partly on weaker evidence like Reddit and includes potentially questionable/current-year claims, reducing trustworthiness.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 11311,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 253,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide addresses the user's query with multiple specific noise-cancelling headphone recommendations under $300, includes prices and purchase links, and cites several credible review sources while noting trade-offs like comfort, ANC differences, and sale-price caveats. Although the provided source summary says 0 cited and the text appears truncated at the comparison table, the visible guide still contains enough detailed, product-specific information to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 12287,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 254,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly answers the query with specific noise-cancelling headphone recommendations under $300, includes prices and purchase paths, and clearly highlights cheaper alternatives with trade-offs. It also cites multiple credible editorial sources within the text and provides enough comparative detail to support a purchase decision.",
+        "failure_type": "none"
+      },
+      "guide_length": 7220,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 255,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products and prices, but it is clearly truncated mid-sentence and the provided metadata indicates 0 cited sources despite inline links. That makes it incomplete and unreliable for a final purchase decision.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 11311,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 256,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.0,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "medium",
+        "reasoning": "The guide addresses the user's query with multiple specific noise-cancelling headphone recommendations under $300, includes prices and purchase links, and cites several credible review sources while noting trade-offs. Although the provided source summary says 0 cited and the text appears truncated at the comparison table, the visible guide is still detailed enough and not clearly cut off before delivering useful recommendations.",
+        "failure_type": "none"
+      },
+      "guide_length": 12287,
+      "product_count": 1,
+      "source_count": 0
+    },
+    {
+      "trace_id": 257,
+      "case_key": "EN-4d8d2fff",
+      "query": "In recent years I’ve gotten into backcountry hiking and stream fishing. I used to wear a smartwatch, but having to recharge it every two days gives me battery anxiety and really breaks the immersion o",
+      "agent_verdict": "FAIL",
+      "agent_score": 51.6,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide recommends specific products with prices and discusses trade-offs, but it fails the source requirement because the provided source list is empty and several citations appear unsupported or generic. It is also visibly truncated at the end, which makes the guide incomplete.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 13603,
+      "product_count": 3,
+      "source_count": 0
+    },
+    {
+      "trace_id": 280,
+      "case_key": "bb84bc0d",
+      "query": "I'm looking for a pair of true wireless noise-cancelling earbuds that can handle pretty much everything life throws at me. I travel internationally for work a lot—usually two long-haul flights every w",
+      "agent_verdict": "FAIL",
+      "agent_score": 0.1,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains only an API error message and provides no product recommendations, prices, sources, or decision-useful analysis. It is clearly truncated/failed output and does not address the user's earbud requirements at all.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 98,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 281,
+      "case_key": "bb84bc0d",
+      "query": "I'm looking for a pair of true wireless noise-cancelling earbuds that can handle pretty much everything life throws at me. I travel internationally for work a lot—usually two long-haul flights every w",
+      "agent_verdict": "FAIL",
+      "agent_score": 26.4,
+      "prelabel": {
+        "verdict": "ERROR",
+        "reasoning": "Extra data: line 7 column 1 (char 429)"
+      },
+      "error": true
+    },
+    {
+      "trace_id": 282,
+      "case_key": "3e93c270",
+      "query": "I'm looking to buy a camera to meet the following needs. For mixed shooting scenarios, as a travel adventure blogger, I need to be able to shoot 4K footage of steep mountain trails with one hand while",
+      "agent_verdict": "FAIL",
+      "agent_score": 24.4,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products and prices, but it relies heavily on dubious or likely incorrect claims and citations, including nonexistent/unsupported product specs and impossible model details, and it appears truncated mid-sentence. Those factual reliability issues make it unsafe as a purchase guide.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 15520,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 283,
+      "case_key": "6efeb257",
+      "query": "I'm looking for a smart door lock. Here are my living situations: I'm a single woman who often comes home late at night and needs to enter the house quickly and safely. The lighting in the entryway is",
+      "agent_verdict": "FAIL",
+      "agent_score": 41.3,
+      "prelabel": {
+        "verdict": "PASS",
+        "confidence": "high",
+        "reasoning": "The guide directly addresses the user's specific safety, access, monitoring, weather-resistance, and anti-pry needs with four named smart locks, prices, purchase links, and a clear final recommendation. It uses multiple credible third-party sources alongside manufacturer specs and includes meaningful trade-offs such as missing cameras, lower water resistance, and reliability concerns.",
+        "failure_type": "none"
+      },
+      "guide_length": 8716,
+      "product_count": 4,
+      "source_count": 15
+    },
+    {
+      "trace_id": 284,
+      "case_key": "e61a3936",
+      "query": "I'm looking for a keyboard to meet my complex daily needs. For work, when editing 4K videos, I need precise physical knobs and quick access keys to adjust the timeline/volume efficiently. Also, I ofte",
+      "agent_verdict": "FAIL",
+      "agent_score": 42.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide includes specific products and prices, but it fails the source-quality requirement because the provided source list is empty and several claims rely on manufacturer marketing or unsupported assertions. It also contains visible factual issues, such as stating the Keychron Q1 Max has no 2.4GHz dongle/Bluetooth-only, which is incorrect for the Q1 Max.",
+        "failure_type": "factual_error"
+      },
+      "guide_length": 13998,
+      "product_count": 4,
+      "source_count": 0
+    },
+    {
+      "trace_id": 285,
+      "case_key": "5e87fc90",
+      "query": "I'm looking to upgrade my home gaming setup and need some advice on picking the right monitor. Here’s what I’m after: 1. I spend 4-6 hours daily multitasking: playing CS2 competitively, streaming on T",
+      "agent_verdict": "FAIL",
+      "agent_score": 45.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide addresses the monitor query and includes specific products, prices, and trade-offs, but the provided text is clearly truncated mid-sentence in the final recommendation. It also contains some questionable or unsupported claims (for example, exact anti-glare and color-variance assertions) that reduce reliability.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 15722,
+      "product_count": 4,
+      "source_count": 16
+    },
+    {
+      "trace_id": 286,
+      "case_key": "3e93c270",
+      "query": "I'm looking to buy a camera to meet the following needs. For mixed shooting scenarios, as a travel adventure blogger, I need to be able to shoot 4K footage of steep mountain trails with one hand while",
+      "agent_verdict": "FAIL",
+      "agent_score": 7.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains no buying advice at all—only an authentication error message. It provides no product recommendations, prices, sources, or decision-making details relevant to the user's camera needs.",
+        "failure_type": "no_products"
+      },
+      "guide_length": 179,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 287,
+      "case_key": "6efeb257",
+      "query": "I'm looking for a smart door lock. Here are my living situations: I'm a single woman who often comes home late at night and needs to enter the house quickly and safely. The lighting in the entryway is",
+      "agent_verdict": "FAIL",
+      "agent_score": 7.9,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains only an API error message and provides no product recommendations, prices, sources, or decision-useful analysis for the smart lock query. It is also clearly too short and effectively truncated.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 179,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 288,
+      "case_key": "e61a3936",
+      "query": "I'm looking for a keyboard to meet my complex daily needs. For work, when editing 4K videos, I need precise physical knobs and quick access keys to adjust the timeline/volume efficiently. Also, I ofte",
+      "agent_verdict": "FAIL",
+      "agent_score": 7.7,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains no buying advice at all—only an API authentication error message. It provides no product recommendations, prices, sources, or decision-making details relevant to the user's keyboard requirements.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 179,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 289,
+      "case_key": "5e87fc90",
+      "query": "I'm looking to upgrade my home gaming setup and need some advice on picking the right monitor. Here’s what I’m after: 1. I spend 4-6 hours daily multitasking: playing CS2 competitively, streaming on T",
+      "agent_verdict": "FAIL",
+      "agent_score": 7.8,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains no buying advice at all—only an API authentication error message. It provides no monitor recommendations, no prices, no sources, and no useful decision-making information.",
+        "failure_type": "other"
+      },
+      "guide_length": 179,
+      "product_count": 0,
+      "source_count": 0
+    },
+    {
+      "trace_id": 290,
+      "case_key": "bb84bc0d",
+      "query": "I'm looking for a pair of true wireless noise-cancelling earbuds that can handle pretty much everything life throws at me. I travel internationally for work a lot—usually two long-haul flights every w",
+      "agent_verdict": "FAIL",
+      "agent_score": 7.5,
+      "prelabel": {
+        "verdict": "FAIL",
+        "confidence": "high",
+        "reasoning": "The guide contains no buying advice at all—only an API authentication error message. It provides no product recommendations, prices, sources, or decision-making details relevant to the user's earbud query.",
+        "failure_type": "truncated"
+      },
+      "guide_length": 179,
+      "product_count": 0,
+      "source_count": 0
+    }
+  ],
+  "disagreements": [
+    {
+      "trace_id": 10,
+      "case_key": "en_clear",
+      "query": "best wireless earbuds under $100",
+      "agent": "PASS",
+      "prelabel": "FAIL",
+      "reasoning": "The guide has strong product recommendations, prices, sources, and trade-offs, but it is clearly truncated at the end ('## How to'), which makes it incomplete. It also includes an over-budget product in a guide for earbuds under $100, though that alone would not necessarily fail it."
+    },
+    {
+      "trace_id": 11,
+      "case_key": "vague",
+      "query": "送女朋友生日礼物",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide addresses the user's need for a girlfriend birthday gift, gives multiple specific product ideas with approximate prices, purchase paths, and some credible third-party sources plus trade-offs. It is somewhat generic for several items and not all recommendations are tied to exact SKUs, but overall it is detailed enough to help a purchase decision."
+    },
+    {
+      "trace_id": 15,
+      "case_key": "comparison",
+      "query": "AirPods Pro 2 vs Sony WH-1000XM5",
+      "agent": "PASS",
+      "prelabel": "FAIL",
+      "reasoning": "The guide has useful comparisons, products, prices, and trade-offs, but it appears truncated mid-section and includes a visible likely factual issue ('AirPods Pro 3 is now available (2026)') unsupported by the provided sources. Because truncation or critical factual errors trigger failure, it does not meet the pass bar."
+    },
+    {
+      "trace_id": 161,
+      "case_key": "ENT-ba8b93c5",
+      "query": "I plan to wipe down and disinfect the facial interface on my VR headset every day using 70% isopropyl alcohol wipes. Could you recommend foam face pad models that won’t bleed color or stain when clean",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly addresses the user's need for facial interfaces that tolerate daily 70% IPA wipe-downs, recommends specific models with prices and purchase paths, and uses both manufacturer guidance and third-party sources. It also includes compatibility warnings, material trade-offs, and limitations such as PU leather long-term wear versus silicone durability."
+    },
+    {
+      "trace_id": 187,
+      "case_key": "ZH-a910fb61",
+      "query": "我想找一款蓝牙耳机，但我的使用需求比较特殊和苛刻。我是做项目管理的，下周要去欧洲出差，整个行程包括12小时的跨洋航班，到了那边还有连续3天的高强度会议，每天至少8小时，期间可能没什么时间给耳机充电。我还要坚持每天1小时的晨跑训练，出汗量比较大。工作上我需要同时连接工作手机和个人手机，经常要在机场、酒店大堂这些嘈杂环境接重要电话，对方必须能听清我说话。我们是开放式办公室，我希望能边听音乐边保持对环境",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly addresses the user's demanding travel/workout/call-quality needs, recommends four specific earbuds with prices and purchase paths, and uses multiple credible review sources alongside trade-offs for each option. It provides enough comparative detail on ANC, call quality, battery life, multipoint, water resistance, comfort, and fast charging to support a purchase decision."
+    },
+    {
+      "trace_id": 189,
+      "case_key": "ZH-36d1d356",
+      "query": "我和朋友想升级我们合作游戏直播的音频。因为我们使用的麦克风类型不同，所以希望能让彼此的声音都呈现出合适、稳定的效果。\n我们一个重要目标是扩大观众。我们的直播形式比较复杂：电脑上是主直播，里面有游戏声音和我们的解说；同时我们还会在手机上开一个并行直播，有时还会从平板加入背景音乐。我们希望能用一个更集中、更顺畅的方式来管理这些不同来源的声音，让整个流程变得更自然。\n另外，我们的直播不只是游戏，还会加入",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly addresses the user's multi-source livestream audio needs, recommends specific products with prices and purchase paths, and discusses trade-offs like limited XLR inputs and platform compatibility. It includes multiple cited sources and enough comparative detail to support a purchase decision, though a few claims rely on weaker sources and one source URL appears mistyped."
+    },
+    {
+      "trace_id": 190,
+      "case_key": "ENT-53086105",
+      "query": "Hello! I’m a first-time mom setting up a nursery for my 3-month-old baby. My core need is to maintain a warm environment in the nursery that is continuous 24/7, stable, and draft-free, especially when",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly addresses the user's unusually strict nursery requirements, explains that no single consumer unit meets all of them, and recommends specific products with prices plus a practical two-unit setup. It includes credible sources, discusses trade-offs and limitations clearly, and provides enough detail to support a purchase decision."
+    },
+    {
+      "trace_id": 247,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly answers the query with several specific noise-cancelling headphone recommendations under $300, includes prices and purchase paths, and discusses trade-offs like ANC vs sound quality, durability, and battery life. It cites multiple recognizable review sources, though some citations are weaker or incomplete and the source list metadata says none were provided."
+    },
+    {
+      "trace_id": 248,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly answers the query with specific under-$300 noise-cancelling headphone recommendations, includes prices and purchase links, and discusses cheaper alternatives plus trade-offs like comfort, airplane ANC, and missing wired audio. Although the metadata says 0 sources cited, the guide text itself references multiple credible editorial sources, so it still provides enough evidence to support a purchase decision."
+    },
+    {
+      "trace_id": 251,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly answers the query with specific under-$300 noise-cancelling headphone recommendations, includes prices and purchase paths, and discusses cheaper alternatives plus trade-offs like comfort, airplane ANC, and missing wired support. Although the metadata says 0 sources cited, the guide text itself references multiple credible editorial sources, so it still provides enough evidence to help a purchase decision."
+    },
+    {
+      "trace_id": 253,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide addresses the user's query with multiple specific noise-cancelling headphone recommendations under $300, includes prices and purchase links, and cites several credible review sources while noting trade-offs like comfort, ANC differences, and sale-price caveats. Although the provided source summary says 0 cited and the text appears truncated at the comparison table, the visible guide still contains enough detailed, product-specific information to support a purchase decision."
+    },
+    {
+      "trace_id": 254,
+      "case_key": "best-noise-cancelling-headphones-under-300-show-cheaper-alternatives",
+      "query": "Best noise cancelling headphones under $300 — Show cheaper alternatives",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly answers the query with specific noise-cancelling headphone recommendations under $300, includes prices and purchase paths, and clearly highlights cheaper alternatives with trade-offs. It also cites multiple credible editorial sources within the text and provides enough comparative detail to support a purchase decision."
+    },
+    {
+      "trace_id": 256,
+      "case_key": "best-noise-cancelling-headphones-under-300",
+      "query": "Best noise cancelling headphones under $300",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide addresses the user's query with multiple specific noise-cancelling headphone recommendations under $300, includes prices and purchase links, and cites several credible review sources while noting trade-offs. Although the provided source summary says 0 cited and the text appears truncated at the comparison table, the visible guide is still detailed enough and not clearly cut off before delivering useful recommendations."
+    },
+    {
+      "trace_id": 283,
+      "case_key": "6efeb257",
+      "query": "I'm looking for a smart door lock. Here are my living situations: I'm a single woman who often comes home late at night and needs to enter the house quickly and safely. The lighting in the entryway is",
+      "agent": "FAIL",
+      "prelabel": "PASS",
+      "reasoning": "The guide directly addresses the user's specific safety, access, monitoring, weather-resistance, and anti-pry needs with four named smart locks, prices, purchase links, and a clear final recommendation. It uses multiple credible third-party sources alongside manufacturer specs and includes meaningful trade-offs such as missing cameras, lower water resistance, and reliability concerns."
+    }
+  ]
+}

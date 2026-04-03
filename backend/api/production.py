@@ -9,9 +9,12 @@ GET  /api/production/preview  — preview traces before importing
 """
 
 import asyncio
+import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel
 from fastapi import APIRouter
@@ -579,10 +582,11 @@ async def _grade_production_experiment(experiment_id: int):
     """
     try:
         await regrade_experiment(experiment_id)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Production grading failed for experiment {experiment_id}: {e}")
         summary = await queries.compute_experiment_summary(experiment_id)
         await queries.update_experiment_status(
-            experiment_id, "complete",
-            summary=summary.model_dump(),
+            experiment_id, "grading_failed",
+            summary={**(summary.model_dump() if summary else {}), "grading_error": str(e)},
             finished_at=time.time(),
         )

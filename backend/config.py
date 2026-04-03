@@ -24,7 +24,9 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GRADING_MODEL = os.getenv("GRADING_MODEL", "openai/gpt-5.4")
 
 # Scoring thresholds
-PASS_THRESHOLD = int(os.getenv("PASS_THRESHOLD", "70"))
+# Calibrated 2026-03-28: human=Pass at 59.2, human=Fail at 51.6 → threshold 60
+# Re-calibrate after 50+ annotations (Hamel audit action #3)
+PASS_THRESHOLD = int(os.getenv("PASS_THRESHOLD", "60"))
 
 # L2 judge toggle
 JUDGE_ENABLED = os.getenv("JUDGE_ENABLED", "").lower() in ("1", "true", "yes")

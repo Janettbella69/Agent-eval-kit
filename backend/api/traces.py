@@ -53,7 +53,7 @@ class TraceToTestCaseRequest(BaseModel):
 # ── Fixed paths MUST be before /{trace_id} to avoid path param conflict ──
 
 @router.get("/list")
-async def list_traces(limit: int = 100, status: str = ""):
+async def list_traces(limit: int = 100, status: str = "", case_type: str = "", human_pass: str = "", model: str = ""):
     """List recent traces across all experiments."""
     db = await queries.get_db()
     where = "WHERE 1=1"
@@ -61,6 +61,18 @@ async def list_traces(limit: int = 100, status: str = ""):
     if status:
         where += " AND t.status = ?"
         params.append(status)
+    if case_type:
+        where += " AND t.case_type = ?"
+        params.append(case_type)
+    if human_pass == "pass":
+        where += " AND t.human_pass = 1"
+    elif human_pass == "fail":
+        where += " AND t.human_pass = 0"
+    elif human_pass == "none":
+        where += " AND t.human_pass IS NULL"
+    if model:
+        where += " AND t.model LIKE ?"
+        params.append(f"%{model}%")
     rows = await db.execute_fetchall(
         f"""SELECT t.id, t.experiment_id, t.case_key, t.trial_num, t.query,
                    t.case_type, t.status, t.duration_s, t.final_score, t.final_pass,

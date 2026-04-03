@@ -8,15 +8,18 @@ export default function TraceListPage() {
   const [traces, setTraces] = useState<TraceListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
+  const [caseTypeFilter, setCaseTypeFilter] = useState('')
+  const [humanPassFilter, setHumanPassFilter] = useState('')
+  const [modelFilter, setModelFilter] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    listAllTraces(200, statusFilter)
+    listAllTraces(200, statusFilter, caseTypeFilter, humanPassFilter, modelFilter)
       .then(data => setTraces(data.traces))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [statusFilter])
+  }, [statusFilter, caseTypeFilter, humanPassFilter, modelFilter])
 
   return (
     <div className="animate-fadeIn">
@@ -58,7 +61,7 @@ export default function TraceListPage() {
           </select>
           <div className="flex-1" />
           <button
-            onClick={() => { setLoading(true); listAllTraces(200, statusFilter).then(d => setTraces(d.traces)).finally(() => setLoading(false)) }}
+            onClick={() => { setLoading(true); listAllTraces(200, statusFilter, caseTypeFilter, humanPassFilter, modelFilter).then(d => setTraces(d.traces)).finally(() => setLoading(false)) }}
             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
           >
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
@@ -69,16 +72,18 @@ export default function TraceListPage() {
           <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-medium text-slate-400 mb-1 block">Case Type</label>
-              <select className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
+              <select value={caseTypeFilter} onChange={e => setCaseTypeFilter(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
                 <option value="">全部</option>
                 <option value="production">Production</option>
-                <option value="shoppingcomp">ShoppingComp</option>
+                <option value="clear_en">Clear EN</option>
+                <option value="clear_zh">Clear ZH</option>
                 <option value="trap">Trap</option>
+                <option value="negative">Negative</option>
               </select>
             </div>
             <div>
               <label className="text-[10px] font-medium text-slate-400 mb-1 block">Human Verdict</label>
-              <select className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
+              <select value={humanPassFilter} onChange={e => setHumanPassFilter(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
                 <option value="">全部</option>
                 <option value="pass">Pass</option>
                 <option value="fail">Fail</option>
@@ -87,7 +92,7 @@ export default function TraceListPage() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-slate-400 mb-1 block">Model</label>
-              <select className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
+              <select value={modelFilter} onChange={e => setModelFilter(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm">
                 <option value="">全部</option>
                 <option value="claude">Claude</option>
                 <option value="minimax">MiniMax</option>

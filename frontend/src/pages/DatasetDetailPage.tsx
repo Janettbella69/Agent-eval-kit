@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getDataset } from '../lib/api.ts'
+import { getDataset, getCaseHistory } from '../lib/api.ts'
 import type { Dataset, Case } from '../types.ts'
 
 export default function DatasetDetailPage() {
@@ -152,11 +152,51 @@ export default function DatasetDetailPage() {
                       <div className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">{trapRubric}</div>
                     </div>
                   )}
+
+                  {/* Case History */}
+                  <CaseHistorySection caseKey={c.key} datasetId={Number(id)} />
                 </div>
               )}
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function CaseHistorySection({ caseKey, datasetId }: { caseKey: string; datasetId: number }) {
+  const [history, setHistory] = useState<Array<{ experiment_id: number; tag: string; trial_num: number; final_score: number; final_pass: boolean; exp_created: number }>>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    getCaseHistory(caseKey, datasetId)
+      .then(r => setHistory(r.history || []))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [caseKey, datasetId])
+
+  if (!loaded || history.length === 0) return null
+
+  const maxScore = Math.max(...history.map(h => h.final_score), 100)
+
+  return (
+    <div>
+      <div className="text-xs font-medium text-slate-500 mb-2">Score History ({history.length} trials)</div>
+      <div className="flex items-end gap-1 h-16">
+        {history.map((h, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-0.5" title={`Exp #${h.experiment_id} Trial ${h.trial_num}: ${h.final_score.toFixed(0)}`}>
+            <div
+              className={`w-full rounded-t ${h.final_pass ? 'bg-emerald-400' : 'bg-red-400'}`}
+              style={{ height: `${Math.max((h.final_score / maxScore) * 48, 2)}px` }}
+            />
+            <span className="text-[8px] tabular-nums text-slate-400">{h.final_score.toFixed(0)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between mt-1 text-[9px] text-slate-400">
+        <span>Exp #{history[0]?.experiment_id}</span>
+        {history.length > 1 && <span>Exp #{history[history.length - 1]?.experiment_id}</span>}
       </div>
     </div>
   )

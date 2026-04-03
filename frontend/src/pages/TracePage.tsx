@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getTrace, annotateGrader, annotateHumanPass, updateOpenCodes, startTraceAnalysis, getAnalysisResult } from '../lib/api.ts'
+import { getTrace, annotateGrader, annotateHumanPass, updateOpenCodes, startTraceAnalysis, getAnalysisResult, getClassifiedErrors, updateReviewStatus, backflowTrace, listDatasets } from '../lib/api.ts'
 import ScoreBadge from '../components/ScoreBadge.tsx'
 import GraderBreakdown from '../components/GraderBreakdown.tsx'
 import TraceTimeline from '../components/TraceTimeline.tsx'
@@ -13,14 +13,25 @@ type TabKey = 'guide' | 'products' | 'sources' | 'events' | 'tools' | 'scores' |
 
 export default function TracePage() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const isReviewMode = searchParams.get('from') === 'review'
   const [trace, setTrace] = useState<Trace | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabKey>('guide')
+  const [reviewAction, setReviewAction] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     getTrace(Number(id)).then(setTrace).finally(() => setLoading(false))
   }, [id])
+
+  const handleReviewAction = async (status: 'reviewed' | 'flagged') => {
+    if (!trace) return
+    setReviewAction(status)
+    await updateReviewStatus(trace.id, status).catch(() => {})
+    navigate('/overview')
+  }
 
   if (loading) return <div className="text-slate-400">Loading...</div>
   if (!trace) return <div className="text-red-500">Trace not found.</div>
@@ -33,6 +44,36 @@ export default function TracePage() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Review Mode Banner */}
+      {isReviewMode && (
+        <div className="rounded-xl bg-blue-50 border border-blue-200 px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-500" style={{ fontSize: '18px' }}>rate_review</span>
+            <span className="text-sm font-medium text-blue-700">Review Mode</span>
+            <span className="text-xs text-blue-500">Review this trace, then mark it</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleReviewAction('reviewed')}
+              disabled={reviewAction !== null}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {reviewAction === 'reviewed' ? 'Marking...' : '✓ Mark Reviewed'}
+            </button>
+            <button
+              onClick={() => handleReviewAction('flagged')}
+              disabled={reviewAction !== null}
+              className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {reviewAction === 'flagged' ? 'Flagging...' : '⚑ Flag'}
+            </button>
+            <Link to="/overview" className="px-3 py-1.5 rounded-lg border border-blue-200 text-xs text-blue-600 hover:bg-blue-100">
+              Back to Queue
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -83,6 +124,7 @@ export default function TracePage() {
           <ScoreBadge score={trace.final_score} pass={trace.final_pass} size="lg" />
           <HumanPassButton trace={trace} onUpdated={setTrace} />
           <SaveToDatasetButton trace={trace} />
+          <BackflowButton trace={trace} />
         </div>
       </div>
 
@@ -1198,10 +1240,54 @@ function CodesTab({ trace, onUpdated }: { trace: Trace; onUpdated: (t: Trace) =>
         </div>
       )}
 
+      {/* Auto-classified errors */}
+      <ClassifiedErrorsSection traceId={trace.id} />
+
       {/* Grouping hint */}
       <div className="text-[11px] text-slate-400 px-1">
         Codes are auto-grouped by prefix (e.g. "search-*") in the Overview coding analysis.
         Use consistent prefixes for effective axial coding.
+      </div>
+    </div>
+  )
+}
+
+function ClassifiedErrorsSection({ traceId }: { traceId: number }) {
+  const [errors, setErrors] = useState<Array<{ code: string; name: string; stage: string; severity: string }>>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    getClassifiedErrors(traceId)
+      .then(r => setErrors(r.errors))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [traceId])
+
+  if (!loaded || errors.length === 0) return null
+
+  return (
+    <div className="rounded-xl bg-white border border-slate-200 p-4">
+      <h4 className="text-sm font-semibold text-slate-700 mb-3">
+        Auto-Classified Errors
+        <span className="text-[10px] font-normal text-slate-400 ml-2">
+          from error taxonomy
+        </span>
+      </h4>
+      <div className="space-y-1.5">
+        {errors.map((e, i) => (
+          <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50">
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              e.severity === 'critical' ? 'bg-red-100 text-red-700'
+                : e.severity === 'high' ? 'bg-amber-100 text-amber-700'
+                : 'bg-slate-100 text-slate-600'
+            }`}>
+              {e.severity}
+            </span>
+            <span className="font-mono text-[11px] text-slate-500">{e.code}</span>
+            <span className="text-sm text-slate-700">{e.name}</span>
+            <span className="ml-auto text-[10px] text-slate-400">{e.stage}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -1469,6 +1555,65 @@ function SaveToDatasetButton({ trace }: { trace: Trace }) {
         {saving && verdict === '' ? '...' : 'Skip'}
       </button>
       <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-600 ml-1">✕</button>
+    </div>
+  )
+}
+
+function BackflowButton({ trace }: { trace: Trace }) {
+  const [open, setOpen] = useState(false)
+  const [datasets, setDatasets] = useState<Array<{ id: number; name: string }>>([])
+  const [selectedDs, setSelectedDs] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState('')
+
+  const handleOpen = async () => {
+    setOpen(true)
+    const ds = await listDatasets().catch(() => [])
+    setDatasets(ds)
+    if (ds.length > 0) setSelectedDs(ds[0].id)
+  }
+
+  const handleBackflow = async () => {
+    if (!selectedDs) return
+    setSaving(true)
+    try {
+      const res = await backflowTrace(selectedDs, {
+        query: trace.query,
+        guide_text: trace.guide_text || '',
+        products: trace.products,
+        sources: trace.sources,
+        events: trace.events || [],
+        hook_metrics: trace.hook_metrics || {},
+        trace_id: trace.id,
+      })
+      setResult(`✓ Saved as ${res.case_key}`)
+      setTimeout(() => { setOpen(false); setResult('') }, 2500)
+    } catch (e) {
+      setResult(`Error: ${e instanceof Error ? e.message : 'failed'}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (result) return <span className={`text-[10px] font-medium ${result.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>{result}</span>
+
+  if (!open) {
+    return (
+      <button onClick={handleOpen} className="px-2 py-1 rounded text-[10px] font-medium bg-violet-50 text-violet-600 hover:bg-violet-100">
+        Backflow to Dataset
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select value={selectedDs ?? ''} onChange={e => setSelectedDs(Number(e.target.value))} className="text-[10px] border border-slate-200 rounded px-1.5 py-0.5">
+        {datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+      </select>
+      <button onClick={handleBackflow} disabled={saving || !selectedDs} className="px-2 py-0.5 rounded text-[10px] font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
+        {saving ? '...' : 'Save'}
+      </button>
+      <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-600">✕</button>
     </div>
   )
 }

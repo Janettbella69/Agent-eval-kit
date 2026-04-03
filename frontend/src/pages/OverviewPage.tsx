@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { listExperiments, listDatasets, getDatasetSaturation, getJudgeAlignment, getDatasetStaleness, getReviewQueue, getReviewStats, updateReviewStatus } from '../lib/api.ts'
+import { listExperiments, listDatasets, getDatasetSaturation, getJudgeAlignment, getDatasetStaleness, getReviewQueue, getReviewStats, updateReviewStatus, getErrorTaxonomy, getCodingAnalysis } from '../lib/api.ts'
+import type { CodingAnalysis } from '../types.ts'
 import ScoreTrendChart from '../components/ScoreTrendChart.tsx'
 import type { Experiment, Dataset, SaturationCase, JudgeAlignment, StalenessReport, ReviewQueueItem, ReviewStats } from '../types.ts'
 
@@ -13,6 +14,8 @@ export default function OverviewPage() {
   const [staleness, setStaleness] = useState<StalenessReport | null>(null)
   const [reviewQueue, setReviewQueue] = useState<ReviewQueueItem[]>([])
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
+  const [errorTaxonomy, setErrorTaxonomy] = useState<Array<{ code: string; name: string; description: string; stage: string; severity: string; fix_hint: string; examples: string[] }>>([])
+  const [codingAnalysis, setCodingAnalysis] = useState<CodingAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,6 +28,8 @@ export default function OverviewPage() {
       getJudgeAlignment().then(setAlignment).catch(() => null),
       getReviewStats().then(setReviewStats).catch(() => null),
       getReviewQueue(8).then(r => setReviewQueue(r.traces)).catch(() => null),
+      getErrorTaxonomy().then(setErrorTaxonomy).catch(() => []),
+      getCodingAnalysis().then(setCodingAnalysis).catch(() => null),
     ]).finally(() => setLoading(false))
   }, [])
 
@@ -531,7 +536,7 @@ export default function OverviewPage() {
                 <div key={item.trace_id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 group">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   <Link
-                    to={`/trace/${item.trace_id}`}
+                    to={`/traces/${item.trace_id}?from=review`}
                     className="flex-1 text-sm text-blue-600 hover:text-blue-700 truncate"
                   >
                     {item.case_key}
@@ -575,6 +580,126 @@ export default function OverviewPage() {
               All traces reviewed!
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Error Taxonomy ── */}
+      {/* ── Coding Analysis (qualitative error patterns) ── */}
+      {codingAnalysis && codingAnalysis.open_codes.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span className="material-symbols-outlined text-violet-500" style={{ fontSize: '18px' }}>code</span>
+            <h3 className="text-sm font-semibold text-slate-700">Coding Analysis</h3>
+            <span className="text-[10px] text-slate-400 ml-auto">{codingAnalysis.total_traces} coded traces</span>
+          </div>
+
+          {/* Axial codes (grouped by prefix) */}
+          {codingAnalysis.axial_codes.length > 0 && (
+            <div className="px-5 py-4 border-b border-slate-100">
+              <div className="text-[10px] text-slate-400 mb-2 uppercase tracking-wider font-semibold">Themes (axial coding)</div>
+              <div className="flex flex-wrap gap-2">
+                {codingAnalysis.axial_codes.map(ax => (
+                  <div key={ax.theme} className="px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-100">
+                    <div className="text-xs font-semibold text-violet-700">{ax.theme}</div>
+                    <div className="text-[10px] text-violet-500">{ax.count} codes · {ax.codes.join(', ')}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Open codes frequency table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Code</th>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Count</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Pass Rate</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Example Cases</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100/80">
+                {codingAnalysis.open_codes.slice(0, 20).map(oc => (
+                  <tr key={oc.code} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-2.5">
+                      <span className="px-2 py-0.5 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium">{oc.code}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 font-medium">{oc.count}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${oc.pass_rate >= 0.7 ? 'bg-emerald-400' : oc.pass_rate >= 0.3 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${oc.pass_rate * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] tabular-nums text-slate-500">{(oc.pass_rate * 100).toFixed(0)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-[11px] text-slate-400 max-w-xs truncate">
+                      {oc.example_case_keys?.slice(0, 3).join(', ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {codingAnalysis.open_codes.length > 20 && (
+            <div className="px-5 py-2 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+              Showing top 20 of {codingAnalysis.open_codes.length} codes
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Error Taxonomy ── */}
+      {errorTaxonomy.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span className="material-symbols-outlined text-red-400" style={{ fontSize: '18px' }}>bug_report</span>
+            <h3 className="text-sm font-semibold text-slate-700">Error Taxonomy</h3>
+            <span className="text-[10px] text-slate-400 ml-auto">{errorTaxonomy.length} error types defined</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Code</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Stage</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Severity</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Fix Hint</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100/80">
+                {errorTaxonomy.map(e => (
+                  <tr key={e.code} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{e.code}</td>
+                    <td className="px-4 py-2.5 text-sm text-slate-700 font-medium">
+                      {e.name}
+                      <div className="text-[11px] text-slate-400 font-normal mt-0.5">{e.description}</div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                        {e.stage}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        e.severity === 'critical' ? 'bg-red-100 text-red-700'
+                          : e.severity === 'high' ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {e.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500 max-w-xs">{e.fix_hint}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

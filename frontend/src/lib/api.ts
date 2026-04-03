@@ -129,7 +129,7 @@ export const backflowTrace = (datasetId: number, body: {
   sources: unknown[]
   events?: unknown[]
   hook_metrics?: Record<string, unknown>
-  trace_id?: string
+  trace_id?: number
   category?: string
 }) => fetchJSON<{ ok: boolean; case_key: string }>(`/datasets/${datasetId}/backflow`, {
   method: 'POST', body: JSON.stringify(body),
@@ -191,9 +191,12 @@ export interface TraceListItem {
   guide_length: number; product_count: number; source_count: number
   input_tokens: number; output_tokens: number; model: string; created_at: number
 }
-export const listAllTraces = (limit: number = 100, status: string = '') => {
+export const listAllTraces = (limit: number = 100, status: string = '', caseType: string = '', humanPass: string = '', model: string = '') => {
   const params = new URLSearchParams({ limit: String(limit) })
   if (status) params.set('status', status)
+  if (caseType) params.set('case_type', caseType)
+  if (humanPass) params.set('human_pass', humanPass)
+  if (model) params.set('model', model)
   return fetchJSON<{ traces: TraceListItem[]; total: number }>(`/traces/list?${params}`)
 }
 
@@ -244,3 +247,46 @@ export const diffPromptVersions = (idA: number, idB: number) =>
   )
 export const seedJudgePrompts = () =>
   fetchJSON<{ seeded: string[]; skipped: string[] }>('/graders/prompts/seed', { method: 'POST' })
+
+// ── Missing APIs (backend exists, frontend didn't call) ──
+
+// Automated evaluation (cron)
+export const cronRun = (datasetId: number, tagPrefix: string = 'cron', concurrency: number = 2) =>
+  fetchJSON<{ id: number; tag: string; status: string }>('/experiments/cron-run', {
+    method: 'POST', body: JSON.stringify({ dataset_id: datasetId, tag_prefix: tagPrefix, concurrency }),
+  })
+
+// Production trace import
+export const getProductionStatus = () => fetchJSON<Record<string, unknown>>('/production/status')
+export const previewProductionTraces = (days: number = 7, tag: string = 'shopping-research', limit: number = 50) =>
+  fetchJSON<{ traces: Array<Record<string, unknown>>; total: number; importable: number }>(
+    `/production/preview?days=${days}&tag=${tag}&limit=${limit}`,
+  )
+export const importProductionTraces = (body: { days?: number; tag?: string; limit?: number; run_grading?: boolean; experiment_tag?: string }) =>
+  fetchJSON<{ experiment_id: number; traces_imported: number; traces_skipped: number }>(
+    '/production/import', { method: 'POST', body: JSON.stringify(body) },
+  )
+
+// Grader agreement (human vs LLM)
+export const getGraderAgreement = () =>
+  fetchJSON<{ total_annotated_traces: number; graders: Record<string, { count: number; mean_diff: number; agreement_rate: number; pearson_r: number | null; bias: number }> }>(
+    '/traces/grader-agreement',
+  )
+
+// Error taxonomy
+export const getErrorTaxonomy = () =>
+  fetchJSON<Array<{ code: string; name: string; description: string; stage: string; severity: string; fix_hint: string; examples: string[] }>>(
+    '/traces/error-taxonomy',
+  )
+
+// Classified errors for a trace
+export const getClassifiedErrors = (traceId: number) =>
+  fetchJSON<{ trace_id: number; errors: Array<{ code: string; name: string; stage: string; severity: string }> }>(
+    `/traces/${traceId}/classified-errors`,
+  )
+
+// Grader validation history
+export const getValidationHistory = (name: string, limit: number = 10) =>
+  fetchJSON<Array<{ grader_name: string; tpr: number; tnr: number; n_samples: number; threshold_met: boolean; created_at: number }>>(
+    `/graders/${name}/validation-history?limit=${limit}`,
+  )

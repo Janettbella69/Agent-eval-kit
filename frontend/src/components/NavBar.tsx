@@ -92,6 +92,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
         },
         { path: '/datasets', label: 'Prompt 数据集', icon: 'dataset' },
         { path: '/graders', label: '评分器', icon: 'tune' },
+        { path: '/automation', label: '自动化评测', icon: 'smart_toy' },
       ],
     },
     {

@@ -144,44 +144,53 @@ export default function DatasetsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {datasets.map(d => (
-          <button
-            key={d.id}
-            onClick={() => setSelectedId(d.id)}
-            className={`text-left rounded-xl border p-4 transition-colors ${
-              selectedId === d.id
-                ? 'border-emerald-300 bg-emerald-50'
-                : 'border-slate-200 bg-white hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-slate-900">{d.name}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  d.name.startsWith('ShoppingComp')
-                    ? 'bg-violet-50 text-violet-700'
-                    : d.suite_type === 'regression'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-blue-50 text-blue-700'
-                }`}>
-                  {d.name.startsWith('ShoppingComp') ? 'shoppingcomp' : (d.suite_type || 'capability')}
-                </span>
-              </div>
-              <Link
-                to={`/datasets/${d.id}`}
-                onClick={e => e.stopPropagation()}
-                className="text-xs text-blue-600 hover:underline"
+      <div className="rounded-xl bg-white border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Cases</th>
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Ver</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100/80">
+            {datasets.map(d => (
+              <tr
+                key={d.id}
+                onClick={() => setSelectedId(d.id)}
+                className={`cursor-pointer transition-colors ${
+                  selectedId === d.id
+                    ? 'bg-emerald-50 border-l-2 border-l-emerald-500'
+                    : 'hover:bg-slate-50/60'
+                }`}
               >
-                Details
-              </Link>
-            </div>
-            <div className="text-xs text-slate-500 mt-1">{d.case_count} cases</div>
-            {d.description && <div className="text-xs text-slate-400 mt-1 line-clamp-1">{d.description}</div>}
-          </button>
-        ))}
+                <td className="px-4 py-3 font-medium text-slate-900">{d.name}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    d.name.startsWith('ShoppingComp') ? 'bg-violet-50 text-violet-700'
+                      : d.suite_type === 'regression' ? 'bg-amber-50 text-amber-700'
+                      : 'bg-blue-50 text-blue-700'
+                  }`}>
+                    {d.name.startsWith('ShoppingComp') ? 'shoppingcomp' : (d.suite_type || 'capability')}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-700">{d.case_count}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-400">v{d.version}</td>
+                <td className="px-4 py-3 text-slate-500 max-w-xs truncate">{d.description || '—'}</td>
+                <td className="px-4 py-3 text-right">
+                  <Link to={`/datasets/${d.id}`} onClick={e => e.stopPropagation()} className="text-xs text-blue-600 hover:underline">
+                    Details
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         {datasets.length === 0 && (
-          <div className="col-span-3 text-center text-slate-400 py-8">
+          <div className="text-center text-slate-400 py-8">
             No datasets yet. Click "↑ Import ShoppingComp" to get started.
           </div>
         )}

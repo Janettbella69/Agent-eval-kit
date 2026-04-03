@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { listExperiments, getValidationSummary, validateGrader, listJudgePrompts, getJudgePrompt, saveJudgePrompt, activatePromptVersion, diffPromptVersions, seedJudgePrompts } from '../lib/api.ts'
+import { listExperiments, getValidationSummary, validateGrader, listJudgePrompts, getJudgePrompt, saveJudgePrompt, activatePromptVersion, diffPromptVersions, seedJudgePrompts, getGraderAgreement, getValidationHistory } from '../lib/api.ts'
 import type { Experiment } from '../types.ts'
 import type { ValidationSummary, JudgePromptListItem, JudgePrompt } from '../lib/api.ts'
 
@@ -33,6 +33,9 @@ export default function GradersPage() {
   const [validation, setValidation] = useState<ValidationSummary>({})
   const [validating, setValidating] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'prompts'>('overview')
+  const [agreement, setAgreement] = useState<{ total_annotated_traces: number; graders: Record<string, { count: number; mean_diff: number; agreement_rate: number; pearson_r: number | null; bias: number }> } | null>(null)
+  const [expandedHistory, setExpandedHistory] = useState<string | null>(null)
+  const [historyData, setHistoryData] = useState<Record<string, Array<{ tpr: number; tnr: number; n_samples: number; threshold_met: boolean; created_at: number }>>>({})
 
   const loadValidation = useCallback(() => {
     getValidationSummary().then(setValidation).catch(() => {})
@@ -41,6 +44,7 @@ export default function GradersPage() {
   useEffect(() => {
     listExperiments().then(setExperiments).finally(() => setLoading(false))
     loadValidation()
+    getGraderAgreement().then(setAgreement).catch(() => {})
   }, [loadValidation])
 
   const handleValidate = async (name: string) => {
@@ -242,7 +246,39 @@ export default function GradersPage() {
                         >
                           {validating === g.name ? 'Validating...' : 'Validate'}
                         </button>
+                        <button
+                          onClick={() => {
+                            if (expandedHistory === g.name) { setExpandedHistory(null); return }
+                            setExpandedHistory(g.name)
+                            if (!historyData[g.name]) {
+                              getValidationHistory(g.name).then(h => setHistoryData(prev => ({ ...prev, [g.name]: h }))).catch(() => {})
+                            }
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        >
+                          {expandedHistory === g.name ? 'Hide' : 'History'}
+                        </button>
                       </div>
+                      {/* Validation History */}
+                      {expandedHistory === g.name && historyData[g.name] && historyData[g.name].length > 0 && (
+                        <div className="mt-2 rounded-lg bg-slate-50 p-2.5">
+                          <div className="text-[10px] text-slate-400 mb-1.5 font-medium">Validation History</div>
+                          <div className="space-y-1">
+                            {historyData[g.name].map((h, i) => (
+                              <div key={i} className="flex items-center gap-2 text-[11px]">
+                                <span className="text-slate-400 tabular-nums w-20">{new Date(h.created_at * 1000).toLocaleDateString()}</span>
+                                <span className={`tabular-nums ${h.tpr >= 0.8 ? 'text-emerald-600' : 'text-red-500'}`}>TPR {(h.tpr * 100).toFixed(0)}%</span>
+                                <span className={`tabular-nums ${h.tnr >= 0.8 ? 'text-emerald-600' : 'text-red-500'}`}>TNR {(h.tnr * 100).toFixed(0)}%</span>
+                                <span className="text-slate-400">n={h.n_samples}</span>
+                                <span className={h.threshold_met ? 'text-emerald-500' : 'text-amber-500'}>{h.threshold_met ? '✓' : '⚠'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {expandedHistory === g.name && (!historyData[g.name] || historyData[g.name].length === 0) && (
+                        <div className="mt-2 text-[11px] text-slate-400 bg-slate-50 rounded-lg p-2.5">No validation history yet</div>
+                      )}
                     </div>
                   )
                 })}
@@ -277,6 +313,70 @@ export default function GradersPage() {
               ))}
             </div>
           </div>
+
+          {/* Grader Agreement (Human vs LLM) */}
+          {agreement && agreement.total_annotated_traces > 0 && (
+            <div className="rounded-xl bg-white border border-slate-200/80 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-500" style={{ fontSize: '18px' }}>handshake</span>
+                  <h3 className="text-sm font-semibold text-slate-700">Grader Agreement (Human vs LLM)</h3>
+                </div>
+                <span className="text-[10px] text-slate-400">{agreement.total_annotated_traces} annotated traces</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Grader</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Count</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mean Diff</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Agreement</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Pearson r</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bias</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100/80">
+                    {Object.entries(agreement.graders).map(([name, g]) => (
+                      <tr key={name} className="hover:bg-slate-50/60">
+                        <td className="px-4 py-2.5 text-sm font-medium text-slate-700">{name.replace(/_/g, ' ')}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{g.count}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          <span className={g.mean_diff <= 10 ? 'text-emerald-600' : g.mean_diff <= 20 ? 'text-amber-600' : 'text-red-600'}>
+                            {g.mean_diff.toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          <span className={g.agreement_rate >= 0.8 ? 'text-emerald-600 font-semibold' : g.agreement_rate >= 0.6 ? 'text-amber-600' : 'text-red-600'}>
+                            {(g.agreement_rate * 100).toFixed(0)}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
+                          {g.pearson_r != null ? g.pearson_r.toFixed(2) : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          <span className={Math.abs(g.bias) <= 5 ? 'text-slate-500' : g.bias > 0 ? 'text-blue-600' : 'text-red-600'}>
+                            {g.bias > 0 ? '+' : ''}{g.bias.toFixed(1)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400">
+                Agreement = human and LLM scores within 15 points. Bias = mean(LLM - Human), positive = LLM scores higher.
+              </div>
+            </div>
+          )}
+
+          {agreement && agreement.total_annotated_traces === 0 && (
+            <div className="rounded-xl bg-white border border-dashed border-slate-300 p-6 text-center">
+              <span className="material-symbols-outlined text-slate-300 block mb-2" style={{ fontSize: '28px' }}>handshake</span>
+              <p className="text-sm text-slate-500 font-medium">Grader Agreement 需要人工标注</p>
+              <p className="text-xs text-slate-400 mt-1">在 Trace 详情页标注各维度分数后，此处将展示 Human vs LLM 的一致性分析</p>
+            </div>
+          )}
         </>
       )}
 

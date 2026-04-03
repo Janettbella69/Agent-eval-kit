@@ -14,6 +14,7 @@ import CreateDatasetPage from './pages/CreateDatasetPage.tsx'
 import CreateEvaluatorPage from './pages/CreateEvaluatorPage.tsx'
 import CreateExperimentPage from './pages/CreateExperimentPage.tsx'
 import TraceListPage from './pages/TraceListPage.tsx'
+import AutomationPage from './pages/AutomationPage.tsx'
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/graders" element={<GradersPage />} />
             <Route path="/graders/create" element={<CreateEvaluatorPage />} />
             <Route path="/experiments/create" element={<CreateExperimentPage />} />
+            <Route path="/automation" element={<AutomationPage />} />
 
             {/* 分析 */}
             <Route path="/overview" element={<OverviewPage />} />

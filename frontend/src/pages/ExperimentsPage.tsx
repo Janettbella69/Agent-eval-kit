@@ -339,7 +339,6 @@ export default function ExperimentsPage() {
 
   const [sortKey, setSortKey] = useState<SortKey>('id')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
-
   useEffect(() => {
     Promise.all([
       listExperiments().then(setExperiments),
@@ -400,6 +399,13 @@ export default function ExperimentsPage() {
           <p className="text-sm text-slate-400 mt-1">管理和追踪所有评测实验的运行状态与结果</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/automation')}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>smart_toy</span>
+            自动化评测
+          </button>
           <button
             onClick={() => navigate('/compare')}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
