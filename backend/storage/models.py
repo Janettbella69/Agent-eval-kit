@@ -54,6 +54,7 @@ class ExperimentIn(BaseModel):
     grading_model: str = ""         # LLM judge model name
     system_prompt: str = ""         # optional system prompt override (for prompt A/B testing)
     auto_run: bool = False          # if True, start running immediately after creation
+    ablation_flags: dict[str, bool] = {}  # disable components for ablation experiments
 
 
 class Experiment(BaseModel):

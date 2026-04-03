@@ -91,6 +91,7 @@ async def create_experiment(body: ExperimentIn):
         "model": model,
         "grading_model": grading_model,
         "system_prompt": body.system_prompt,
+        "ablation_flags": body.ablation_flags,
     }
     experiment_id = await queries.create_experiment(body.dataset_id, body.tag, config)
 
@@ -104,7 +105,8 @@ async def create_experiment(body: ExperimentIn):
                   "constraints": c.constraints, "golden_data": c.golden_data} for c in all_cases]
         asyncio.create_task(
             run_experiment(experiment_id, cases, concurrency=body.concurrency,
-                           trials=body.trials, model=model, system_prompt=body.system_prompt)
+                           trials=body.trials, model=model, system_prompt=body.system_prompt,
+                           ablation_flags=body.ablation_flags or None)
         )
         return {"id": experiment_id, "status": "running", "cases": len(cases)}
 
@@ -147,11 +149,12 @@ async def run_experiment_endpoint(experiment_id: int):
     concurrency = experiment.config.get("concurrency", 1)
     model = experiment.config.get("model", "")
     system_prompt = experiment.config.get("system_prompt", "")
+    ablation_flags = experiment.config.get("ablation_flags") or None
 
     # Run in background
     asyncio.create_task(
         run_experiment(experiment_id, cases, concurrency=concurrency, trials=trials,
-                       model=model, system_prompt=system_prompt)
+                       model=model, system_prompt=system_prompt, ablation_flags=ablation_flags)
     )
 
     return {"status": "started", "cases": len(cases), "trials": trials, "model": model or "(default)"}
@@ -202,6 +205,7 @@ class CronRunRequest(BaseModel):
     trials: int = 1
     concurrency: int = 2
     judge_enabled: bool = True
+    ablation_flags: dict[str, bool] = {}  # disable components for ablation experiments
 
 
 @router.post("/cron-run")
@@ -253,12 +257,14 @@ async def cron_run_experiment(body: CronRunRequest, request: Request):
         "system_prompt": body.system_prompt,
         "git_commit": _get_git_commit(),
         "mode": "benchmark",
+        "ablation_flags": body.ablation_flags,
     }
     experiment_id = await queries.create_experiment(body.dataset_id, tag, config)
 
     asyncio.create_task(
         run_experiment(experiment_id, cases, concurrency=body.concurrency,
-                       trials=body.trials, model=body.model, system_prompt=body.system_prompt)
+                       trials=body.trials, model=body.model, system_prompt=body.system_prompt,
+                       ablation_flags=body.ablation_flags or None)
     )
 
     return {

@@ -103,6 +103,7 @@ async def collect_single_case(
     auto_clarify: bool = True,
     model: str = "",
     system_prompt: str = "",
+    ablation_flags: dict[str, bool] | None = None,
 ) -> CollectedResult:
     """Collect SSE events for a single case (Phase 1 only — no grading).
 
@@ -112,6 +113,7 @@ async def collect_single_case(
         auto_clarify: Auto-answer clarification questions.
         model: Override orchestrator model for this run.
         system_prompt: Override system prompt for this run.
+        ablation_flags: Disable agent components for ablation experiments.
 
     Returns:
         CollectedResult with raw SSE data.
@@ -123,7 +125,7 @@ async def collect_single_case(
     clarification_count = 0
 
     while True:
-        result = await collect_sse(query, history, model=model, system_prompt=system_prompt)
+        result = await collect_sse(query, history, model=model, system_prompt=system_prompt, ablation_flags=ablation_flags)
 
         # Auto-answer clarifications with LLM user simulator
         if result.clarification and auto_clarify and clarification_count < MAX_AUTO_CLARIFICATIONS:
@@ -228,6 +230,7 @@ async def run_experiment(
     grade_concurrency: int = 2,
     model: str = "",
     system_prompt: str = "",
+    ablation_flags: dict[str, bool] | None = None,
 ):
     """Run all cases: streaming collect→grade pipeline with overlapping phases.
 
@@ -238,6 +241,7 @@ async def run_experiment(
     Args:
         model: Override orchestrator model for all cases in this experiment.
         system_prompt: Override system prompt for all cases.
+        ablation_flags: Disable agent components for ablation experiments.
 
     Updates DB traces and broadcasts progress via WebSocket.
     """
@@ -278,7 +282,7 @@ async def run_experiment(
 
         try:
             async with collect_sem:
-                result = await collect_single_case(case, trial_num, model=model, system_prompt=system_prompt)
+                result = await collect_single_case(case, trial_num, model=model, system_prompt=system_prompt, ablation_flags=ablation_flags)
 
             trace_data = _result_to_trace_data(result, case, trial_num)
             await queries.update_trace(trace_id, **trace_data)

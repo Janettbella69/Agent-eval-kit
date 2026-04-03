@@ -42,6 +42,7 @@ async def collect_sse(
     timeout_s: int | None = None,
     model: str = "",
     system_prompt: str = "",
+    ablation_flags: dict[str, bool] | None = None,
 ) -> CollectedResult:
     """Stream SSE from product backend and collect results.
 
@@ -51,6 +52,7 @@ async def collect_sse(
         timeout_s: Override default timeout.
         model: Override orchestrator model (passed to product backend).
         system_prompt: Override system prompt (passed to product backend).
+        ablation_flags: Disable agent components for ablation experiments.
 
     Returns:
         CollectedResult with all accumulated data.
@@ -70,6 +72,8 @@ async def collect_sse(
         body["model"] = model
     if system_prompt:
         body["system_prompt"] = system_prompt
+    if ablation_flags:
+        body["ablation_flags"] = ablation_flags
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=30.0)) as client:
         async with client.stream("POST", url, json=body, headers=headers) as resp:
