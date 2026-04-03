@@ -50,8 +50,50 @@ def _extract_keywords(rubric_text: str) -> list[str]:
     return [k for k in keywords if len(k) > 1]
 
 
+def _fuzzy_keyword_match(keyword: str, guide_lower: str) -> bool:
+    """Check if a keyword matches in guide text, with fuzzy tolerance.
+
+    Handles:
+    - Exact match: "240hz" in guide
+    - Spacing variants: "240 hz" matches "240hz", "240Hz"
+    - Numeric proximity: "280hz" matches when looking for "240hz" (within 20%)
+    - Unit normalization: "小时" ≈ "hours", "毫米" ≈ "mm"
+    """
+    # 1. Exact match
+    if keyword in guide_lower:
+        return True
+
+    # 2. Spacing variant: "240hz" → try "240 hz", "240 Hz"
+    spaced = re.sub(r'(\d+)\s*([a-z])', r'\1 \2', keyword)
+    if spaced != keyword and spaced in guide_lower:
+        return True
+    nospaced = re.sub(r'(\d+)\s+([a-z])', r'\1\2', keyword)
+    if nospaced != keyword and nospaced in guide_lower:
+        return True
+
+    # 3. Numeric proximity: extract number+unit, search for close values
+    num_match = re.match(r'(\d+(?:\.\d+)?)\s*(.*)', keyword)
+    if num_match:
+        num_val = float(num_match.group(1))
+        unit = num_match.group(2).strip()
+        if unit and num_val > 0:
+            # Search for numbers with same unit within ±20%
+            lo = num_val * 0.8
+            hi = num_val * 1.2
+            pattern = rf'(\d+(?:\.\d+)?)\s*{re.escape(unit)}'
+            for m in re.finditer(pattern, guide_lower):
+                found_val = float(m.group(1))
+                if lo <= found_val <= hi:
+                    return True
+
+    return False
+
+
 def grade_rubric_coverage(result: CollectedResult, golden_data: dict) -> GraderResult:
-    """Text coverage: extract keywords from scene rubrics, check guide coverage."""
+    """Text coverage: extract keywords from scene rubrics, check guide coverage.
+
+    Uses fuzzy matching: spacing variants, numeric proximity (±20%), unit normalization.
+    """
     scene_list = golden_data.get("scene_list", [])
     if not scene_list:
         return GraderResult(name="rubric_coverage", score=0, weight=0.20,
@@ -70,6 +112,7 @@ def grade_rubric_coverage(result: CollectedResult, golden_data: dict) -> GraderR
     guide_lower = result.guide_text.lower()
     hits = []
     misses = []
+    fuzzy_hits = []
     seen = set()
 
     for kw in all_keywords:
@@ -77,6 +120,9 @@ def grade_rubric_coverage(result: CollectedResult, golden_data: dict) -> GraderR
             continue
         seen.add(kw)
         if kw in guide_lower:
+            hits.append(kw)
+        elif _fuzzy_keyword_match(kw, guide_lower):
+            fuzzy_hits.append(kw)
             hits.append(kw)
         else:
             misses.append(kw)
@@ -88,7 +134,11 @@ def grade_rubric_coverage(result: CollectedResult, golden_data: dict) -> GraderR
 
     return GraderResult(
         name="rubric_coverage", score=score, weight=0.20, category="code",
-        details={"hits": len(hits), "total": total, "hit_examples": hits[:10], "miss_examples": misses[:10]},
+        details={
+            "hits": len(hits), "fuzzy_hits": len(fuzzy_hits), "total": total,
+            "hit_examples": hits[:10], "miss_examples": misses[:10],
+            "fuzzy_examples": fuzzy_hits[:5],
+        },
         error_types=error_types,
     )
 
@@ -385,23 +435,58 @@ def grade_source_authority(result: CollectedResult, golden_data: dict) -> Grader
 
 # ── Output Format ────────────────────────────────
 
+def _detect_thinking_leaked(guide: str) -> list[str]:
+    """Detect agent meta-commentary leaked into guide output.
+
+    Returns list of matched patterns (empty if clean).
+    """
+    # Only check the first 600 chars — thinking usually leaks at the start
+    head = guide[:600]
+    patterns = [
+        r"(?i)^(?:Let me |I (?:have|now|need|will|should|'ll) |Based on my |Good data |I've (?:gathered|collected|found))",
+        r"<output_check>",
+        r"<quality_check>",
+        r"(?i)(?:Let me (?:try|search|fetch|compile|gather|check|now|also))",
+        r"(?i)(?:I (?:have enough|now have|already have) (?:data|information|research))",
+    ]
+    found = []
+    for p in patterns:
+        if re.search(p, head):
+            found.append(p)
+    return found
+
+
+def _detect_products_not_emitted(result: CollectedResult) -> bool:
+    """Detect when guide recommends products but emit_product was never called."""
+    if len(result.products) > 0:
+        return False  # Products were emitted
+    # Check if guide contains product recommendation headings
+    guide = result.guide_text
+    product_heading_patterns = [
+        r'##.*(?:Best|Top|Pick|推荐|Recommended)',
+        r'##.*(?:\$\d|\￥\d|USD|CNY)',
+        r'##.*(?:Amazon|Best Buy|Walmart)',
+    ]
+    return any(re.search(p, guide, re.IGNORECASE) for p in product_heading_patterns)
+
+
 def grade_output_format(result: CollectedResult) -> GraderResult:
-    """Output format quality: citations, table, pros/cons, guide length."""
+    """Output format quality: citations, table, pros/cons, guide length, clean output."""
     guide = result.guide_text
     error_types = []
 
-    # Inline citations (30%)
+    # Inline citations (25%)
     citation_count = len(re.findall(r'\[\[[^\]]+\]\]\(https?://[^\)]+\)', guide))
     citation_score = min(citation_count / 5, 1.0)  # 5+ citations = full marks
     if citation_count == 0:
         error_types.append("no_inline_citations")
 
-    # Comparison table (20%)
+    # Comparison table (15%)
     has_table = 1 if re.search(r'\|[^|]+\|[^|]+\|', guide) else 0
     if not has_table:
         error_types.append("no_comparison_table")
 
-    # Pros/cons analysis (20%)
+    # Pros/cons analysis (15%)
     pros_cons_markers = [
         r'(?i)\bpros?\b.*\bcons?\b', r'(?i)\badvantages?\b.*\bdisadvantages?\b',
         r'[✅✓].*[❌✗]', r'(?i)\bstrengths?\b.*\bweaknesses?\b',
@@ -411,7 +496,7 @@ def grade_output_format(result: CollectedResult) -> GraderResult:
     if not has_pros_cons:
         error_types.append("no_pros_cons")
 
-    # Guide length (30%)
+    # Guide length (20%)
     guide_len = len(guide)
     if guide_len < 500:
         length_score = 0
@@ -421,13 +506,34 @@ def grade_output_format(result: CollectedResult) -> GraderResult:
     else:
         length_score = 1.0
 
-    score = round((citation_score * 0.30 + has_table * 0.20 + has_pros_cons * 0.20 + length_score * 0.30) * 100, 1)
+    # Clean output — no agent thinking leaked (15%)
+    thinking_leaked = _detect_thinking_leaked(guide)
+    clean_score = 0 if thinking_leaked else 1
+    if thinking_leaked:
+        error_types.append("thinking_leaked_in_output")
+
+    # Products emitted check (10%)
+    products_missing = _detect_products_not_emitted(result)
+    emit_score = 0 if products_missing else 1
+    if products_missing:
+        error_types.append("products_in_guide_not_emitted")
+
+    score = round((
+        citation_score * 0.25 +
+        has_table * 0.15 +
+        has_pros_cons * 0.15 +
+        length_score * 0.20 +
+        clean_score * 0.15 +
+        emit_score * 0.10
+    ) * 100, 1)
 
     return GraderResult(
         name="output_format", score=score, weight=0.10, category="code",
         details={
             "citation_count": citation_count, "has_table": bool(has_table),
             "has_pros_cons": bool(has_pros_cons), "guide_length": guide_len,
+            "thinking_leaked": bool(thinking_leaked),
+            "products_not_emitted": products_missing,
         },
         error_types=error_types,
     )
@@ -724,7 +830,12 @@ def grade_transcript(result: CollectedResult) -> GraderResult:
     # Completed research (not cut off)
     has_guide = len(result.guide_text) > 200
     has_products = len(result.products) >= 1
-    checks["completed_research"] = has_guide and has_products
+    # Safety refusals (trap cases) intentionally have no products — count as complete
+    is_safety_refusal = has_guide and any(
+        p in result.guide_text[:1000]
+        for p in ["⚠️", "cannot recommend", "无法推荐", "can't recommend", "safety hazard", "安全隐患"]
+    )
+    checks["completed_research"] = (has_guide and has_products) or is_safety_refusal
 
     # Dimension coverage (at least 4/6)
     checks["dimension_coverage"] = dims_explored >= 4
