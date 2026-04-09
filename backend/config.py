@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Product backend URL (the system under test)
-PRODUCT_API_URL = os.getenv("PRODUCT_API_URL", "http://localhost:8000")
+# Default to eval-dedicated backend (port 8001, started via docker-compose.eval.yml).
+# Override with PRODUCT_API_URL=http://localhost:8000 to test against production.
+PRODUCT_API_URL = os.getenv("PRODUCT_API_URL", "http://localhost:8001")
 
 # Shared secret for /api/internal/research
 EVAL_API_KEY = os.getenv("EVAL_API_KEY", "")
