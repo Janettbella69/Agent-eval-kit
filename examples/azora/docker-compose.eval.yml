@@ -1,0 +1,57 @@
+# Eval-dedicated backend instance — isolated from production traffic.
+# Shares code and API keys with production, but runs in a separate container
+# with fixed resource limits to eliminate infrastructure noise in eval results.
+#
+# Usage:
+#   docker compose -f docker-compose.eval.yml up -d --build
+#   # run eval...
+#   docker compose -f docker-compose.eval.yml down
+
+services:
+  aiazora-eval:
+    build:
+      context: .
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+      - ORCHESTRATOR_MODEL=${ORCHESTRATOR_MODEL}
+      - FALLBACK_MODEL=${FALLBACK_MODEL}
+      - SCRAPER_MODEL=${SCRAPER_MODEL}
+      - CLASSIFIER_MODEL=${CLASSIFIER_MODEL}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - EVAL_API_KEY=${EVAL_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY}
+      - RAINFOREST_API_KEY=${RAINFOREST_API_KEY}
+      - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - EXA_API_KEY=${EXA_API_KEY}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      # Eval-specific overrides
+      - MAX_CONCURRENT_REQUESTS=1
+      - CORS_ORIGINS=*
+    ports:
+      - "8001:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4g
+        reservations:
+          cpus: "1"
+          memory: 2g
+    volumes:
+      - eval-image-store:/app/backend/image_store
+    restart: "no"
+    networks:
+      - eval-net
+
+volumes:
+  eval-image-store:
+
+networks:
+  eval-net:
