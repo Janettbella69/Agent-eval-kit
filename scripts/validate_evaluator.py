@@ -5,9 +5,9 @@ Based on Hamel Husain's validate-evaluator skill:
 https://hamel.dev/blog/posts/evals-skills/
 
 Usage:
-    python eval/scripts/validate_evaluator.py [--db eval/backend/eval.db]
-    python eval/scripts/validate_evaluator.py --per-grader
-    python eval/scripts/validate_evaluator.py --experiment-id 5
+    python scripts/validate_evaluator.py [--db backend/eval.db]
+    python scripts/validate_evaluator.py --per-grader
+    python scripts/validate_evaluator.py --experiment-id 5
 """
 
 import argparse
@@ -326,7 +326,7 @@ def load_split_traces(db_path: str, split_name: str) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate LLM evaluator against human labels")
-    parser.add_argument("--db", default="eval/backend/eval.db", help="Path to SQLite DB")
+    parser.add_argument("--db", default="backend/eval.db", help="Path to SQLite DB")
     parser.add_argument("--experiment-id", type=int, help="Filter to specific experiment")
     parser.add_argument("--per-grader", action="store_true", help="Show per-grader alignment")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for splits")

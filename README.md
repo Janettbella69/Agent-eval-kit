@@ -70,16 +70,94 @@ trace 采集 → 错误分析(开放编码→taxonomy) → 人工标注(gold) �
 - **Judge prompt 版本哈希**（`JUDGE_PROMPT_VERSION`）——每次实验记录 judge 版本，分数变化可归因："是 Agent 变了，还是尺子变了？"
 - **通过阈值由人工标注校准得出**，并随标注量增长定期重校准，不拍脑袋
 
-## 实验管理与回归门禁
+## 使用指南
 
-```bash
-python cli.py import --dataset legacy_v1          # 导入数据集
-python cli.py run --dataset "Legacy Baseline V1" --tag v1.2 --trials 2
-python cli.py summary --experiment-id 1           # 实验摘要
-python cli.py regression --latest --threshold 5   # 回归检查：掉分超过阈值 → 非零退出码
+按使用旅程组织。所有命令在仓库根目录执行，评测后端需已启动（见 Quickstart）。
+
+### 1. 定义数据集
+
+数据集是一个 JSON 文件（真实示例见 `datasets/`）：
+
+```json
+{
+  "name": "My Agent Baseline V1",
+  "description": "First regression suite for my agent",
+  "cases": [
+    {
+      "key": "noise_cancel_budget",
+      "query": "best noise cancelling headphones under $400 with 30 hour battery",
+      "type": "constrained",
+      "constraints": {"price_max": 400, "must_have": ["noise cancelling", "30+ hour battery"]}
+    }
+  ]
+}
 ```
 
-`scripts/run_eval.sh` 封装了 CI 场景：`smoke`（冒烟）/ `regression`（回归门禁）/ `capability`（全量能力评估），退出码可直接接入流水线。支持消融实验（选择性关闭 Agent 组件，定位能力来源）。
+- `key` 在数据集内唯一；`type` 是你自定义的 case 分类（后续按类型分析）；`constraints` 供 L0 约束 grader 消费；有参考答案的 case 可加 `golden_data`
+- 导入：把文件放进 `datasets/` 后执行 `python cli.py import --dataset <文件名>`（不带 `.json`）
+- 数据集带版本号：case 变更自动 +1，每次实验记录所用版本，结果可追溯
+
+### 2. 跑实验、读结果
+
+```bash
+python cli.py run --dataset "My Agent Baseline V1" --tag v1.0 --trials 2 --concurrency 2
+python cli.py list                                # 历史实验
+python cli.py summary --experiment-id 1           # 汇总：分数、通过情况、各 grader 表现
+python cli.py regression --latest --threshold 5   # 最近两次对比，掉分超阈值 → exit 1
+```
+
+实时进度看 UI 实验页（WebSocket 推送）。每条 trace 记录 prompt 版本、模型、judge prompt 版本哈希——分数变化可归因到"Agent 变了"还是"尺子变了"。
+
+### 3. 人工标注（建立 gold labels）
+
+```bash
+python scripts/sample_for_annotation.py --experiment-id 1 --count 50   # 采样（--seed 可复现）
+```
+
+然后在 UI 的 TracePage 逐条判 Pass/Fail、打开放编码（open codes）。判据写在 `ANNOTATION_GUIDE.md`——换领域先重写它。标注落库到 `human_pass` / `human_scores` 字段。
+
+### 4. 校准 judge（拿到可信的 TPR/TNR）
+
+```bash
+python scripts/calibration_loop.py --create-splits        # train/dev/test 划分（一次性）
+python scripts/validate_evaluator.py --per-grader         # judge vs 人工 gold 对齐报告
+python scripts/extract_few_shots.py                       # 从 train 分歧样本提炼 few-shots
+python scripts/calibration_loop.py --run-dev --notes "v2 few-shots"   # dev 集重打分
+# …迭代到对齐达标后…
+python scripts/calibration_loop.py --run-test             # test 集一次性终评（防过拟合）
+python scripts/calibration_loop.py --history              # 校准历史
+```
+
+### 5. 接入 CI
+
+```bash
+EVAL_DATASET="My Agent Baseline V1" scripts/run_eval.sh regression --threshold 5
+```
+
+模式：`smoke`（2 case 冒烟）/ `regression`（回归门禁）/ `capability`（全量 ×N trials）。退出码 0=通过、1=回归、2=平台或被测系统不可达，可直接做流水线门禁。支持消融实验（选择性关闭 Agent 组件，定位能力来源）。
+
+### 6. 导入生产 trace
+
+```bash
+python scripts/export_langfuse.py --days 30 --limit 200 --tag my-agent --grade
+```
+
+需要 `.env` 中的 LangFuse 密钥；`--grade` 表示导入后立即打分。
+
+### 环境变量参考
+
+| 变量 | 作用 | 默认 |
+|---|---|---|
+| `PRODUCT_API_URL` | 被测 Agent 的 API 地址 | `http://localhost:8001` |
+| `EVAL_API_KEY` | 与被测系统的共享密钥 | 空 |
+| `ANTHROPIC_API_KEY` | L2 judge 调用所需 | 空 |
+| `GRADING_MODEL` | judge 模型（必须强于被测模型） | 见 `backend/config.py` |
+| `JUDGE_ENABLED` | 是否启用 L2 judge | 关 |
+| `PASS_THRESHOLD` | 通过阈值（应由校准得出，勿拍脑袋） | `60` |
+| `PRODUCT_CODE_PATH` | 被测 Agent 源码路径，preset judge 深检用（可选） | 空 |
+| `LANGFUSE_SECRET_KEY` / `LANGFUSE_PUBLIC_KEY` | 生产 trace 导入 | 空 |
+| `EVAL_DATASET` | `run_eval.sh` 使用的数据集名 | `Legacy Baseline V1` |
+| `EVAL_CORS_ORIGINS` | 评测后端 CORS 放行来源 | `localhost:5200` |
 
 ## 接入你自己的 Agent
 
@@ -153,3 +231,5 @@ ANNOTATION_GUIDE.md  # 标注指南（AZORA 案例实例，可作为你的领域
 ## 方法论参考
 
 评测方法论对齐 [Hamel Husain 的 evals 体系](https://hamel.dev/blog/posts/evals/)：错误分析先行、人工 gold 为锚、judge 必须校准、指标服务于迭代而非汇报。
+
+与 [openai/evals](https://github.com/openai/evals) 定位互补：它是**基准 registry + 模板化跑分**（YAML 注册 + JSONL 数据 + `oaieval` CLI），适合横向比较模型能力，其 model-graded judge 为 zero-shot、校准手段只有 meta-eval 一致率（简单 accuracy，无 TPR/TNR、无数据划分）；本平台是**单一 Agent 产品的迭代评测系统**——judge 校准做到 TPR/TNR + train/dev/test 划分 + few-shot 迭代，并自带标注 UI、回归门禁与生产 trace 回流。
