@@ -1,6 +1,7 @@
 """Eval platform FastAPI server — port 8100."""
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -23,15 +24,16 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="AIAzora Eval Platform", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Agent Eval Platform", version="1.0.0", lifespan=lifespan)
+
+# Comma-separated origins; extend via EVAL_CORS_ORIGINS for deployed setups.
+_cors_origins = os.getenv(
+    "EVAL_CORS_ORIGINS", "http://localhost:5200,http://127.0.0.1:5200"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5200",
-        "http://127.0.0.1:5200",
-        "https://azorashopping.site",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

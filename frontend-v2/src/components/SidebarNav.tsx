@@ -61,7 +61,7 @@ export default function SidebarNav() {
         }}>A</div>
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#1F2430', fontFamily: 'Manrope', lineHeight: 1.2 }}>
-            Azora Eval
+            Agent Eval
           </div>
           <Text style={{ fontSize: 9, color: '#8F96A3', letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>
             Workbench

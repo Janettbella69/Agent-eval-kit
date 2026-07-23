@@ -2,9 +2,13 @@
 # run_eval.sh — Server-side eval runner for CI and scheduled jobs.
 #
 # Usage:
-#   eval/scripts/run_eval.sh regression [--tag ci-abc1234]     # Quick 5-case regression
-#   eval/scripts/run_eval.sh capability [--tag weekly-20260315] # Full capability eval
-#   eval/scripts/run_eval.sh smoke                              # 2-case smoke test
+#   scripts/run_eval.sh regression [--tag ci-abc1234]      # Quick regression
+#   scripts/run_eval.sh capability [--tag weekly-20260315] # Full capability eval
+#   scripts/run_eval.sh smoke                              # 2-case smoke test
+#
+# Environment:
+#   PRODUCT_API_URL  Base URL of the system under test (default http://localhost:8001)
+#   EVAL_DATASET     Dataset name to run (default "Legacy Baseline V1")
 #
 # Exit codes:
 #   0 = passed (or no regression)
@@ -14,13 +18,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-EVAL_DIR="$PROJECT_DIR/eval"
+EVAL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # repo root
 BACKEND_DIR="$EVAL_DIR/backend"
 DB_PATH="$BACKEND_DIR/eval.db"
 
 # Default settings
 MODE="${1:-regression}"
+PRODUCT_API_URL="${PRODUCT_API_URL:-http://localhost:8001}"
+DATASET="${EVAL_DATASET:-Legacy Baseline V1}"
 TAG=""
 THRESHOLD=5
 CONCURRENCY=2
@@ -40,24 +45,21 @@ done
 
 # Auto-generate tag from git commit if not provided
 if [[ -z "$TAG" ]]; then
-    GIT_SHA=$(cd "$PROJECT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    GIT_SHA=$(cd "$EVAL_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     TAG="${MODE}-${GIT_SHA}-$(date +%Y%m%d)"
 fi
 
 echo "=========================================="
-echo "  AIAzora Eval Runner"
+echo "  Agent Eval Runner"
 echo "  Mode: $MODE"
 echo "  Tag: $TAG"
 echo "=========================================="
 
-# Check product backend is running
-echo "Checking product backend..."
-if ! curl -sf --max-time 5 http://localhost:8000/ > /dev/null 2>&1; then
-    # Try Docker internal network
-    if ! curl -sf --max-time 5 http://172.18.0.2:80/ > /dev/null 2>&1; then
-        echo "ERROR: Product backend not reachable"
-        exit 2
-    fi
+# Check the system under test is reachable
+echo "Checking product backend at $PRODUCT_API_URL..."
+if ! curl -skf --max-time 5 "$PRODUCT_API_URL/" > /dev/null 2>&1; then
+    echo "ERROR: Product backend not reachable at $PRODUCT_API_URL"
+    exit 2
 fi
 echo "✅ Product backend is up"
 
@@ -74,21 +76,18 @@ async def main():
 asyncio.run(main())
 "
 
-# Select dataset and cases based on mode
+# Select cases based on mode (dataset comes from EVAL_DATASET, default above)
 case "$MODE" in
     smoke)
-        DATASET="Legacy Baseline V1"
         CASES="en_clear,comparison"
         CONCURRENCY=1
         echo "Smoke test: 2 cases"
         ;;
     regression)
-        DATASET="Legacy Baseline V1"
         CASES=""  # All cases in dataset
-        echo "Regression check: all cases in Legacy Baseline"
+        echo "Regression check: all cases in '$DATASET'"
         ;;
     capability)
-        DATASET="Legacy Baseline V1"
         CASES=""  # All cases
         TRIALS=2
         echo "Capability eval: all cases × ${TRIALS} trials"

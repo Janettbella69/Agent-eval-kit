@@ -93,19 +93,41 @@ python cli.py regression --latest --threshold 5   # 回归检查：掉分超过�
 
 ## Quickstart
 
-```bash
-# 评测后端（端口 8100）
-cd backend
-pip install -r requirements.txt
-cp .env.example .env   # 填入 ANTHROPIC_API_KEY、PRODUCT_API_URL、EVAL_API_KEY
-python main.py
+前置要求：**Python 3.10+**（3.11 实测验证）、**Node 18+**。
 
-# 标注/实验前端
-cd frontend-v2
-npm install && npm run dev
+**1. 启动评测后端（端口 8100）**
+
+```bash
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt
+cd backend
+cp .env.example .env    # 至少填 PRODUCT_API_URL；要用 L2 judge 再填 ANTHROPIC_API_KEY
+python main.py          # 起来后 http://localhost:8100/docs 可见全部 API
 ```
 
-被测系统的隔离实例部署示例见 `examples/azora/docker-compose.eval.yml`。
+**2. 导入示例数据集、跑通 CLI（这一步不需要任何 API key）**
+
+```bash
+python cli.py import --dataset legacy_v1    # 在仓库根目录执行，导入 20 个示例 case
+python cli.py list
+```
+
+**3. 启动标注/实验 UI**
+
+```bash
+cd frontend-v2
+npm install && npm run dev                  # http://localhost:5200，/api 与 /ws 已代理到 8100
+```
+
+**4. 跑一个实验（这一步需要被测 Agent 在线）**
+
+```bash
+python cli.py run --dataset "Legacy Baseline V1" --tag first-run
+python cli.py summary --experiment-id 1
+python cli.py regression --latest --threshold 5
+```
+
+依赖边界：`run` 需要 `PRODUCT_API_URL` 指向一个真实运行的被测 Agent；L2 judge 打分需要 `ANTHROPIC_API_KEY`。两者都没有时，import / list / UI 浏览 / 人工标注仍然全部可用。被测系统的隔离实例部署示例见 `examples/azora/docker-compose.eval.yml`。
 
 ## 目录结构
 

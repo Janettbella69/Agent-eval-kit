@@ -11,7 +11,7 @@ All graders fail-open: return None on errors (pipeline handles gracefully).
 
 When JUDGE_PRESET=true, each grader gets full Claude Code capabilities via the
 preset="claude_code" system prompt in eval_agent.py. The prompts below become
-the "append" portion, and the shared JUDGE_CAPABILITIES block is added automatically.
+the "append" portion, and the shared judge_capabilities() block is added automatically.
 
 The graders receive the FULL agent operation log (search queries, URLs fetched,
 errors, hook metrics, timing) — not just the final output. This gives the judge

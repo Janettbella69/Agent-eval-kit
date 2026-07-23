@@ -329,7 +329,7 @@ def main():
 
     print("\n" + "=" * 50)
     print("  Export complete!")
-    print("  View at: https://azorashopping.site/eval/")
+    print("  View in the eval UI (frontend-v2: npm run dev → http://localhost:5200)")
     print("=" * 50)
 
 

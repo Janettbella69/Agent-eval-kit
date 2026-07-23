@@ -117,13 +117,14 @@ from config import (
     JUDGE_PRESET,
     JUDGE_MAX_TURNS_PRESET,
     JUDGE_MAX_TURNS_BASIC,
+    PRODUCT_CODE_PATH,
 )
 from graders.types import L2_DIMENSIONS
 
 
 # ── Shared capabilities block (appended in preset mode) ──────────────
 
-JUDGE_CAPABILITIES = """
+_JUDGE_CAPABILITIES_TEMPLATE = """
 ## You Are a Deep-Investigation Judge
 
 You have FULL Claude Code capabilities — WebSearch, WebFetch, Bash, Read, Grep, Glob.
@@ -132,20 +133,9 @@ You are not a passive text reviewer. You are an autonomous investigator with too
 ### Your Information Advantage ("God's Eye View")
 You see things the end-user never sees:
 1. **Agent Operation Log** — every search query, URL fetched, error, timing breakdown
-2. **Source Code** — the agent's actual prompt, hooks, quality gate logic
-3. **Live Web Access** — verify claims against current reality
-4. **Bash/Code** — write analysis scripts for quantitative checks
-
-### Source Code Reference
-The product agent's codebase lives at `/home/ubuntu/aiazora/backend/agent/`:
-- `prompts.py` — what the agent was INSTRUCTED to do (output format, quality gate, rules)
-- `hooks.py` — how hooks guide research (entity tracking, dimension coverage, adaptive guidance)
-- `tools.py` — custom tool definitions (emit_product, emit_sources, emit_question)
-- `engine.py` — agent orchestration, MAX_TURNS, MCP server config
-
-Reading these files helps you judge: did the agent follow its own rules? Did it pass
-its quality gate? Did it use the right research strategy?
-
+2. **Live Web Access** — verify claims against current reality
+3. **Bash/Code** — write analysis scripts for quantitative checks
+{source_code_ref}
 ## Autonomous Investigation Protocol
 
 ### Phase 1: Analyze Operation Log
@@ -181,6 +171,23 @@ If initial holds up after verification, do NOT revise — one accurate score bea
 - Focus on claims that are central to the guide's value
 - If something is easily verifiable and important, verify it
 """
+
+_SOURCE_CODE_REF_TEMPLATE = """
+### Source Code Reference
+The product agent's codebase lives at `{path}` (configured via PRODUCT_CODE_PATH).
+Reading it shows what the agent was INSTRUCTED to do — prompts, hooks, quality
+gates — so you can judge: did the agent follow its own rules? Did it pass its
+quality gate? Did it use the right research strategy?
+"""
+
+
+def judge_capabilities() -> str:
+    """Capabilities block for preset mode; includes the product source-code
+    section only when PRODUCT_CODE_PATH is configured."""
+    ref = ""
+    if PRODUCT_CODE_PATH:
+        ref = _SOURCE_CODE_REF_TEMPLATE.format(path=PRODUCT_CODE_PATH)
+    return _JUDGE_CAPABILITIES_TEMPLATE.format(source_code_ref=ref)
 
 
 # ── Tool lists ────────────────────────────────────────────────────────
@@ -230,7 +237,7 @@ def _build_options(
         system_prompt = {
             "type": "preset",
             "preset": "claude_code",
-            "append": prompt_text + "\n" + JUDGE_CAPABILITIES,
+            "append": prompt_text + "\n" + judge_capabilities(),
         }
         allowed_tools = base_tools + _PRESET_EXTRA_TOOLS
         max_turns = JUDGE_MAX_TURNS_PRESET if is_l2 else min(JUDGE_MAX_TURNS_PRESET, 15)

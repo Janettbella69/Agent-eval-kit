@@ -47,6 +47,10 @@ LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_BASE_URL = os.getenv("LANGFUSE_BASE_URL", "https://us.cloud.langfuse.com")
 
+# Product agent source code location (optional) — when set, the preset-mode
+# judge is told to read the product's code to check rule/quality-gate compliance.
+PRODUCT_CODE_PATH = os.getenv("PRODUCT_CODE_PATH", "")
+
 # Database
 DB_PATH = Path(os.getenv("DB_PATH", str(Path(__file__).parent / "eval.db")))
 

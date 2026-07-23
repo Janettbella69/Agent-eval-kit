@@ -260,7 +260,7 @@ async def cmd_regrade(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AIAzora Eval Platform CLI")
+    parser = argparse.ArgumentParser(description="Agent Eval Platform CLI")
     subparsers = parser.add_subparsers(dest="command")
 
     # import (legacy JSON)
