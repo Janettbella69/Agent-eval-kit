@@ -66,9 +66,12 @@ cd "$BACKEND_DIR"
 python3 -c "
 import asyncio, sys
 sys.path.insert(0, '.')
-from storage.database import init_db
-asyncio.run(init_db())
-print('✅ Eval database ready')
+from storage.database import init_db, close_db
+async def main():
+    await init_db()
+    print('✅ Eval database ready')
+    await close_db()
+asyncio.run(main())
 "
 
 # Select dataset and cases based on mode
@@ -100,19 +103,22 @@ esac
 python3 -c "
 import asyncio, sys
 sys.path.insert(0, '.')
-from storage.database import init_db
+from storage.database import init_db, close_db
 from storage import queries
 async def check():
     await init_db()
-    ds = await queries.get_dataset_by_name('$DATASET')
-    if ds:
-        print(f'Dataset exists: {ds.name} ({ds.case_count} cases)')
-    else:
-        print('Dataset not found — importing...')
-        # Import via CLI
-        import subprocess
-        subprocess.run(['python3', '$EVAL_DIR/cli.py', 'import', '--dataset', 'legacy_v1'], check=True)
-        print('Imported.')
+    try:
+        ds = await queries.get_dataset_by_name('$DATASET')
+        if ds:
+            print(f'Dataset exists: {ds.name} ({ds.case_count} cases)')
+        else:
+            print('Dataset not found — importing...')
+            # Import via CLI
+            import subprocess
+            subprocess.run(['python3', '$EVAL_DIR/cli.py', 'import', '--dataset', 'legacy_v1'], check=True)
+            print('Imported.')
+    finally:
+        await close_db()
 asyncio.run(check())
 "
 

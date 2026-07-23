@@ -139,7 +139,11 @@ async def init_db() -> None:
     """Initialize database connection and create tables."""
     global _db
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _db = await aiosqlite.connect(str(DB_PATH))
+    conn = aiosqlite.connect(str(DB_PATH))
+    # aiosqlite.Connection is a non-daemon Thread — daemonize it so one-shot
+    # entrypoints (CLI, scripts) that skip close_db() can still exit.
+    conn.daemon = True
+    _db = await conn
     _db.row_factory = aiosqlite.Row
     await _db.execute("PRAGMA journal_mode=WAL")
     await _db.execute("PRAGMA foreign_keys=ON")
@@ -159,3 +163,12 @@ async def get_db() -> aiosqlite.Connection:
     if _db is None:
         await init_db()
     return _db  # type: ignore
+
+
+async def close_db() -> None:
+    """Close the shared connection. One-shot entrypoints (CLI, scripts) call
+    this on exit; the server keeps the connection for its whole lifetime."""
+    global _db
+    if _db is not None:
+        await _db.close()
+        _db = None

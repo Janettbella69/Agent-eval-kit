@@ -312,7 +312,15 @@ def main():
         "regrade": cmd_regrade,
     }
 
-    return asyncio.run(cmd_map[args.command](args))
+    async def dispatch():
+        from storage.database import close_db
+
+        try:
+            return await cmd_map[args.command](args)
+        finally:
+            await close_db()
+
+    return asyncio.run(dispatch())
 
 
 if __name__ == "__main__":
