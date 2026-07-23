@@ -1,10 +1,10 @@
-# Agent Eval Kit
+# Agent Eval 
 
 通用的 LLM Agent 评测平台：把"这个 Agent 到底好不好"从一句感觉，变成**可测量、可校准、可回归**的工程问题。
 
 被测 Agent 只需暴露一个 HTTP API——平台把它当黑盒，负责其余的一切：数据集管理、批量实验、trace 采集、分层打分（规则 → 指标 → LLM Judge）、人工标注界面、Judge 校准闭环、回归门禁。
 
-> 脱胎于真实产品 [AZORA](https://github.com/Janettbella69/AIAzora-v3)（AI 购物研究 Agent）的评测体系，现抽取为独立平台。AZORA 是第一个完整接入案例（见 `examples/azora/` 与 `datasets/`）。
+AZORA 是第一个完整接入案例（见 `examples/azora/` 与 `datasets/`）。
 
 ## 为什么需要它
 
