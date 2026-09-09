@@ -16,6 +16,7 @@ from api.agent import router as agent_router
 from api.production import router as production_router
 from api.graders import router as graders_router
 from runner.progress import get_manager
+from adapters.open_acciowork.api import router as acciowork_router
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ app.include_router(traces_router)
 app.include_router(agent_router)
 app.include_router(production_router)
 app.include_router(graders_router)
+app.include_router(acciowork_router)
 
 
 @app.get("/api/health")

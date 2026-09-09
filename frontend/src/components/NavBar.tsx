@@ -60,11 +60,13 @@ function PulsingDot() {
 
 export default function NavBar({ collapsed, onToggle }: NavBarProps) {
   const location = useLocation()
+  const acciowork = location.pathname.startsWith('/acciowork')
   const [experiments, setExperiments] = useState<Experiment[]>([])
 
   useEffect(() => {
+    if (acciowork) return
     listExperiments().then(setExperiments).catch(() => {})
-  }, [])
+  }, [acciowork])
 
   const completed = experiments.filter(e => e.status === 'complete')
   const running = experiments.filter(e => e.status === 'running')
@@ -80,6 +82,16 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
     .map(e => e.summary?.avg_score ?? 0)
 
   const navGroups: NavGroup[] = [
+    {
+      key: 'acciowork',
+      label: 'Open-Acciowork',
+      items: [
+        { path: '/acciowork/experiments', label: '实验归档', icon: 'experiment' },
+        { path: '/acciowork/traces', label: '运行 Trace', icon: 'timeline' },
+        { path: '/acciowork/review', label: '人工复核', icon: 'fact_check' },
+        { path: '/acciowork/compare', label: '实验对比', icon: 'compare_arrows' },
+      ],
+    },
     {
       key: 'eval',
       label: '评测',
@@ -125,7 +137,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
       {/* ── Logo ── */}
       <div className="h-14 flex items-center justify-between px-3 border-b border-slate-100">
         <Link
-          to="/experiments"
+          to={acciowork ? '/acciowork/experiments' : '/experiments'}
           className={`flex items-center gap-2.5 ${collapsed ? 'mx-auto' : ''}`}
         >
           <span className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-200/50 flex-shrink-0">
@@ -160,7 +172,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
       </div>
 
       {/* ── Live score card ── */}
-      {!collapsed && (
+      {!collapsed && !location.pathname.startsWith('/acciowork') && (
         <div className="mx-3 mt-3 mb-1 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/60 border border-slate-200/50 p-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
@@ -202,7 +214,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
       )}
 
       {/* ── Collapsed score dot ── */}
-      {collapsed && latestScore != null && (
+      {collapsed && !acciowork && latestScore != null && (
         <div className="mx-auto mt-3 mb-1">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold tabular-nums ${
@@ -220,7 +232,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
 
       {/* ── Nav groups ── */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-        {navGroups.map(group => (
+        {navGroups.filter(group => !acciowork || group.key === 'acciowork').map(group => (
           <div key={group.key}>
             {!collapsed && (
               <div className="px-2.5 mb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -250,6 +262,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
                       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-emerald-500 transition-all" />
                     )}
                     <span
+                      aria-hidden="true"
                       className={`material-symbols-outlined flex-shrink-0 transition-colors ${
                         active ? 'text-emerald-600' : ''
                       }`}
@@ -284,7 +297,7 @@ export default function NavBar({ collapsed, onToggle }: NavBarProps) {
       {!collapsed && (
         <div className="px-4 py-2.5 border-t border-slate-100">
           <div className="text-[10px] text-slate-400 tabular-nums">
-            {experiments.length} experiments &middot; {completed.length} completed
+            {acciowork ? '独立归档 · 人工复核 · 版本对比' : `${experiments.length} experiments · ${completed.length} completed`}
           </div>
         </div>
       )}
