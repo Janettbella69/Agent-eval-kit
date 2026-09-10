@@ -6,10 +6,6 @@
 
 AZORA 是第一个完整接入案例（见 `examples/azora/` 与 `datasets/`）。
 
-Open-Acciowork 的历史归档、原生 Trace、逐陈述人工复核和实验对比已接入
-`frontend/`，入口 `/acciowork/experiments`；[启动与数据契约](examples/open-acciowork/README.md)。
-该适配器保留本项目的 Snapshot/Gold 语义，不套用购物评分。
-
 ## 为什么需要它
 
 Agent 产品的迭代困境：改了 prompt / 换了模型 / 加了工具，**你怎么知道变好了还是变坏了？**
@@ -40,7 +36,7 @@ trace 采集 → 错误分析(开放编码→taxonomy) → 人工标注(gold) �
 └─────────────────────────────┘        └────────────┬─────────────┘
                                                     │
                                        ┌────────────▼─────────────┐
-                                       │  标注前端 (frontend/)     │
+                                       │  标注前端 (frontend-v2/)  │
                                        │  Trace 查看 / Pass-Fail   │
                                        │  标注 / 开放编码 / 实验对比 │
                                        └──────────────────────────┘
@@ -197,7 +193,7 @@ python cli.py list
 **3. 启动标注/实验 UI**
 
 ```bash
-cd frontend
+cd frontend-v2
 npm install && npm run dev                  # http://localhost:5200，/api 与 /ws 已代理到 8100
 ```
 
@@ -216,7 +212,7 @@ python cli.py regression --latest --threshold 5
 ```
 backend/          # FastAPI 评测后端：api/ graders/ runner/ storage/ agent/
 frontend/         # 标注与实验 UI（v1，含失效漏斗、分数趋势、实验对比）
-frontend-v2/      # 界面探索（部分页面仍为占位；实际工作流使用 frontend/）
+frontend-v2/      # 标注与实验 UI（v2，datasets/evaluators/experiments/observation）
 calibration/      # Judge 校准 few-shots（groundedness / actionability / rubric / trap）
 datasets/         # 数据集（AZORA 案例：deepshop_v1 / legacy_v1）
 scripts/          # 采样、标注、校准、回归、LangFuse 导出等工作流脚本

@@ -9,11 +9,11 @@ export default defineConfig(({ command }) => ({
     port: 5200,
     proxy: {
       '/api': {
-        target: process.env.EVAL_API_TARGET || 'http://127.0.0.1:8100',
+        target: 'http://localhost:8100',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8100',
+        target: 'ws://localhost:8100',
         ws: true,
       },
     },

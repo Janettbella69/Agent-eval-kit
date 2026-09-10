@@ -15,12 +15,6 @@ import CreateEvaluatorPage from './pages/CreateEvaluatorPage.tsx'
 import CreateExperimentPage from './pages/CreateExperimentPage.tsx'
 import TraceListPage from './pages/TraceListPage.tsx'
 import AutomationPage from './pages/AutomationPage.tsx'
-import AccioworkExperiments from './acciowork/ExperimentsPage.tsx'
-import AccioworkTraces from './acciowork/TracesPage.tsx'
-import AccioworkTrace from './acciowork/TracePage.tsx'
-import AccioworkReview from './acciowork/ReviewPage.tsx'
-import AccioworkCompare from './acciowork/ComparePage.tsx'
-import './acciowork/styles.css'
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -39,13 +33,6 @@ export default function App() {
         <div className="max-w-7xl mx-auto">
           <Routes>
             <Route path="/" element={<Navigate to="/experiments" replace />} />
-            <Route path="/acciowork" element={<Navigate to="/acciowork/experiments" replace />} />
-            <Route path="/acciowork/experiments" element={<AccioworkExperiments />} />
-            <Route path="/acciowork/experiments/:id" element={<AccioworkExperiments />} />
-            <Route path="/acciowork/traces" element={<AccioworkTraces />} />
-            <Route path="/acciowork/traces/:id" element={<AccioworkTrace />} />
-            <Route path="/acciowork/review" element={<AccioworkReview />} />
-            <Route path="/acciowork/compare" element={<AccioworkCompare />} />
 
             {/* 评测 */}
             <Route path="/experiments" element={<ExperimentsPage />} />
